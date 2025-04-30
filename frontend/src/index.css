@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add custom styles below */
+
+/* Animation for highlighting new table rows */
+@keyframes highlight-fade {
+  from { background-color: #12b86a; } /* Tailwind's green-200 */
+  to { background-color: transparent; }
+}
+
+/* Apply animation to the cells within the highlighted row */
+.new-pickup-highlight > td {
+  animation: highlight-fade 2s ease-out forwards;
+}
+
+/* Ensure DatePicker popover appears above other elements if needed */
+.react-datepicker-popper {
+  z-index: 50 !important; /* Adjust if necessary */
+}

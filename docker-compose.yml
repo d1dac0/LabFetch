@@ -1,0 +1,43 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "8181:80" # Expose frontend on host port 8181
+    # No secrets needed here, but could add env_file if frontend needed them
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3001:3001" # Expose backend on host port 3001
+    env_file:
+      - secrets.env # Load variables from this file
+    environment:
+      - NODE_ENV=production
+      # DATABASE_URL and JWT_SECRET will be loaded from secrets.env
+    depends_on:
+      - db
+
+  db:
+    image: postgres:14-alpine
+    restart: always
+    env_file:
+      - secrets.env # Load POSTGRES_USER, POSTGRES_DB, POSTGRES_PASSWORD from this file
+    # Rely solely on env_file for DB credentials
+    # environment:
+      # POSTGRES_USER: ${POSTGRES_USER}
+      # POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d # Mount init scripts
+    ports:
+      - "5432:5432" # Expose DB port only if needed for external access
+
+volumes:
+  postgres_data:
+    driver: local 
