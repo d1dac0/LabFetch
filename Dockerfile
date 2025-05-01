@@ -37,8 +37,8 @@ RUN ls -la /app/frontend
 RUN ls -la /app/frontend/dist || echo "Dist directory not found or empty after touch attempt"
 
 # --- Copy Frontend Build Output to Nginx Root ---
-# Make sure the build output is copied correctly
-COPY frontend/dist /usr/share/nginx/html/
+# Try copying directly from the internal path
+COPY --from=0 /app/frontend/dist /usr/share/nginx/html/
 
 # --- Nginx Configuration ---
 # Copy the Nginx configuration file provided in the frontend directory
