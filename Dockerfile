@@ -6,8 +6,10 @@ COPY backend/package.json backend/package-lock.json* ./
 COPY backend .
 # Ensure node_modules doesn't exist before installing
 RUN rm -rf node_modules
-# Install production dependencies after copying source
-RUN npm ci --production
+# Install production dependencies using npm install
+RUN npm install --omit=dev --ignore-scripts # Use install, omit dev deps, ignore package scripts initially
+# Explicitly rebuild bcrypt
+RUN npm rebuild bcrypt --build-from-source
 
 # Stage 2: Build Frontend Dependencies & Assets
 FROM node:20-slim AS frontend-builder
