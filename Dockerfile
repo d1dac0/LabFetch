@@ -20,16 +20,18 @@ RUN cd backend && npm ci --production
 COPY backend ./backend
 
 # --- Frontend Setup ---
-# Copy frontend package files and install dependencies
+# Copy frontend package files first
 COPY frontend/package.json frontend/package-lock.json* ./frontend/
+# Install dependencies
 RUN cd frontend && npm install --build-from-source
-
-# Copy frontend source code and build static assets
+# Copy the rest of the frontend source code
 COPY frontend ./frontend
+# Build static assets
 RUN cd frontend && npx vite build
 
 # --- Copy Frontend Build Output to Nginx Root ---
-COPY frontend/dist /usr/share/nginx/html
+# Make sure the build output is copied correctly
+COPY frontend/dist /usr/share/nginx/html/
 
 # --- Nginx Configuration ---
 # Copy the Nginx configuration file provided in the frontend directory
