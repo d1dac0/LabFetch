@@ -29,6 +29,10 @@ COPY frontend ./frontend
 # Build static assets
 RUN cd frontend && npx vite build
 
+# Debug: List contents after build
+RUN ls -la /app/frontend
+RUN ls -la /app/frontend/dist || echo "Dist directory not found or empty"
+
 # --- Copy Frontend Build Output to Nginx Root ---
 # Make sure the build output is copied correctly
 COPY frontend/dist /usr/share/nginx/html/
