@@ -1,5 +1,13 @@
 # Stage 1: Build Backend Dependencies & Code
 FROM node:20-slim AS backend-builder
+
+# Install Python and build tools needed for native modules (like bcrypt)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* ./
 # Copy source code first
