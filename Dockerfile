@@ -2,6 +2,8 @@
 FROM node:20-slim AS backend-builder
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* ./
+# Ensure node_modules doesn't exist before installing
+RUN rm -rf node_modules
 RUN npm ci --production
 COPY backend .
 
