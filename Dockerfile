@@ -1,4 +1,19 @@
-# Use a Node.js base image
+# Stage 1: Build Backend Dependencies & Code
+FROM node:20-slim AS backend-builder
+WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json* ./
+RUN npm ci --production
+COPY backend .
+
+# Stage 2: Build Frontend Dependencies & Assets
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install --build-from-source
+COPY frontend .
+RUN npx vite build
+
+# Stage 3: Final Production Image
 FROM node:20-slim
 
 # Install supervisor and nginx
@@ -11,34 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set up working directory
 WORKDIR /app
 
-# --- Backend Setup ---
-# Copy backend package files and install dependencies
-COPY backend/package.json backend/package-lock.json* ./backend/
-RUN cd backend && npm ci --production
+# Copy built backend code and dependencies from backend-builder stage
+COPY --from=backend-builder /app/backend ./backend
 
-# Copy backend source code
-COPY backend ./backend
-
-# --- Frontend Setup ---
-# Copy frontend package files first
-COPY frontend/package.json frontend/package-lock.json* ./frontend/
-# Install dependencies
-RUN cd frontend && npm install --build-from-source
-# Copy the rest of the frontend source code
-COPY frontend ./frontend
-# Build static assets
-RUN cd frontend && npx vite build
-
-# Debug: Try creating a file in dist if it exists
-RUN mkdir -p /app/frontend/dist && touch /app/frontend/dist/debug.txt || echo "Failed to touch debug file in dist"
-
-# Debug: List contents after build/touch
-RUN ls -la /app/frontend
-RUN ls -la /app/frontend/dist || echo "Dist directory not found or empty after touch attempt"
-
-# --- Copy Frontend Build Output to Nginx Root ---
-# Try copying directly from the internal path
-COPY --from=0 /app/frontend/dist /usr/share/nginx/html/
+# Copy built frontend assets from frontend-builder stage to nginx root
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
 # --- Nginx Configuration ---
 # Copy the Nginx configuration file provided in the frontend directory
