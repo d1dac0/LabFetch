@@ -2,10 +2,12 @@
 FROM node:20-slim AS backend-builder
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json* ./
+# Copy source code first
+COPY backend .
 # Ensure node_modules doesn't exist before installing
 RUN rm -rf node_modules
+# Install production dependencies after copying source
 RUN npm ci --production
-COPY backend .
 
 # Stage 2: Build Frontend Dependencies & Assets
 FROM node:20-slim AS frontend-builder
