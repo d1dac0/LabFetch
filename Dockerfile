@@ -28,6 +28,9 @@ RUN cd frontend && npm install --build-from-source
 COPY frontend ./frontend
 RUN cd frontend && npx vite build
 
+# --- Copy Frontend Build Output to Nginx Root ---
+COPY frontend/dist /usr/share/nginx/html
+
 # --- Nginx Configuration ---
 # Copy the Nginx configuration file provided in the frontend directory
 # Note: Ensure nginx.conf correctly proxies /api/ to the backend
