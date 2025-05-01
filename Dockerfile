@@ -29,9 +29,12 @@ COPY frontend ./frontend
 # Build static assets
 RUN cd frontend && npx vite build
 
-# Debug: List contents after build
+# Debug: Try creating a file in dist if it exists
+RUN mkdir -p /app/frontend/dist && touch /app/frontend/dist/debug.txt || echo "Failed to touch debug file in dist"
+
+# Debug: List contents after build/touch
 RUN ls -la /app/frontend
-RUN ls -la /app/frontend/dist || echo "Dist directory not found or empty"
+RUN ls -la /app/frontend/dist || echo "Dist directory not found or empty after touch attempt"
 
 # --- Copy Frontend Build Output to Nginx Root ---
 # Make sure the build output is copied correctly
