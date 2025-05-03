@@ -107,6 +107,7 @@ const sendSseUpdate = (data) => {
 router.post('/', async (req, res, next) => {
   logger.debug('Received pickup request body:', { body: req.body });
 
+  // Destructure updated fields
   const {
     nombreMascota,
     tipoMuestra,
@@ -123,16 +124,16 @@ router.post('/', async (req, res, next) => {
     sufijoCardinal2,
     num3,
     complemento,
-    fechaHoraPreferida, // Expecting ISO String or null
-    tipoRecogida
+    fechaPreferida,   // NEW: Expecting YYYY-MM-DD string or null
+    turnoPreferido   // NEW: Expecting 'mañana', 'tarde', or null
   } = req.body;
 
   // --- Enhanced Backend Validation --- 
   const errors = {};
 
   // Basic required fields
-  if (!nombreMascota?.trim()) errors.nombreMascota = 'Nombre de mascota requerido.';
-  if (!tipoMuestra?.trim()) errors.tipoMuestra = 'Tipo de muestra requerido.';
+  if (!nombreMascota?.trim()) errors.nombreMascota = 'Nombre del solicitante requerido.'; // Updated label
+  if (!tipoMuestra?.trim()) errors.tipoMuestra = 'Número de contacto requerido.'; // Updated label
   if (!departamento?.trim()) errors.departamento = 'Departamento requerido.';
   if (!ciudad?.trim()) errors.ciudad = 'Ciudad requerida.';
   if (!tipoVia?.trim()) {
@@ -151,23 +152,32 @@ router.post('/', async (req, res, next) => {
   if (letraVia2 && !validLetters.includes(letraVia2)) errors.letraVia2 = 'Letra de vía 2 inválida.';
   if (sufijoCardinal2 && !validQuadrants.includes(sufijoCardinal2)) errors.sufijoCardinal2 = 'Sufijo cardinal 2 inválido.';
 
-  // Date validation
-  if (tipoRecogida === 'programada') {
-      if (!fechaHoraPreferida) {
-          errors.fechaHoraPreferida = 'Falta fecha y hora para recogida programada.';
+  // Date and Shift validation
+  if (fechaPreferida) {
+      // Basic YYYY-MM-DD format check (simple regex, consider library for robust validation)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaPreferida)) {
+          errors.fechaPreferida = 'Formato de fecha inválido (esperado YYYY-MM-DD).';
       } else {
-          // Basic ISO format check & future date check
           try {
-              const selectedDate = new Date(fechaHoraPreferida);
+              const selectedDate = new Date(fechaPreferida + 'T00:00:00'); // Parse as UTC start of day
+              const today = new Date();
+              today.setHours(0, 0, 0, 0); // Compare date part only
               if (isNaN(selectedDate.getTime())) {
-                  errors.fechaHoraPreferida = 'Formato de fecha y hora inválido.';
-              } else if (selectedDate <= new Date()) {
-                  errors.fechaHoraPreferida = 'La fecha y hora deben ser futuras.';
+                  errors.fechaPreferida = 'Fecha inválida.';
+              } else if (selectedDate < today) {
+                  errors.fechaPreferida = 'La fecha no puede ser pasada.';
               }
           } catch (e) {
-              errors.fechaHoraPreferida = 'Formato de fecha y hora inválido.';
+               errors.fechaPreferida = 'Error al procesar la fecha.';
           }
       }
+      // If date is provided, shift must also be provided and valid
+      if (!turnoPreferido || !['mañana', 'tarde'].includes(turnoPreferido)) {
+          errors.turnoPreferido = 'Se requiere un turno (mañana/tarde) si se especifica fecha.';
+      }
+  } else if (turnoPreferido) {
+      // Cannot have shift without date
+       errors.fechaPreferida = 'Se requiere una fecha para seleccionar un turno.';
   }
 
   // Check if any errors were found
@@ -181,19 +191,18 @@ router.post('/', async (req, res, next) => {
     // Generate the full address string for storage
     const direccionCompleta = generateFullAddress(req.body);
 
-    // Define the SQL query for insertion
-    // status defaults to 'pendiente', driver_id is null initially
+    // Update the SQL query for insertion
     const insertQuery = `
       INSERT INTO pickups (
         nombre_mascota, tipo_muestra, departamento, ciudad, 
         tipo_via, num_via_p1, letra_via, bis, letra_bis, sufijo_cardinal1, 
         num_via2, letra_via2, sufijo_cardinal2, num3, complemento, 
-        direccion_completa, fecha_hora_preferida, tipo_recogida
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        direccion_completa, fecha_preferida, turno_preferido -- Use new columns
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) -- 18 params
       RETURNING *;
     `;
 
-    // Prepare the values for the parameterized query
+    // Update the values array for the parameterized query
     const values = [
       nombreMascota,
       tipoMuestra,
@@ -201,8 +210,8 @@ router.post('/', async (req, res, next) => {
       ciudad,
       tipoVia,
       numViaP1,
-      letraVia || null, // Send null if empty
-      bis || false,     // Send false if null/undefined
+      letraVia || null,
+      bis || false,
       letraBis || null,
       sufijoCardinal1 || null,
       numVia2,
@@ -211,8 +220,8 @@ router.post('/', async (req, res, next) => {
       num3,
       complemento || null,
       direccionCompleta,
-      tipoRecogida === 'programada' ? fechaHoraPreferida : null, // Ensure null if not programmed
-      tipoRecogida
+      fechaPreferida,   // Pass date string directly (PostgreSQL will cast)
+      turnoPreferido   // Pass shift string or null
     ];
 
     // Execute the query
@@ -376,4 +385,5 @@ router.put('/:id', async (req, res, next) => {
 
 // TODO: Add DELETE /api/pickups/:id route if needed
 
+module.exports = router; 
 module.exports = router; 

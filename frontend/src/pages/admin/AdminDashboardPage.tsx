@@ -227,13 +227,13 @@ const AdminDashboardPage: React.FC = () => {
 
   if (loading) return <p>Cargando solicitudes...</p>;
 
-  // Determine the public URL from environment variable, fallback for development
-  const publicFormUrl = import.meta.env.VITE_PUBLIC_APP_URL || 'http://localhost:8181/';
+  // Determine the public URL from the current window location
+  const publicFormUrl = window.location.origin; // Get base URL automatically
   const displayUrl = publicFormUrl.endsWith('/') ? publicFormUrl : `${publicFormUrl}/`; // Ensure trailing slash
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Panel de Administrador - Solicitudes de Recogida</h1>
+      <h1 className="text-2xl font-bold mb-4">Panel de Administrador - Solicitudes de Recolección</h1>
       
       {/* Public Form Link */}
       <p className="mb-4 text-sm text-gray-600">

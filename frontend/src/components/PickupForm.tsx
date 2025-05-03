@@ -99,20 +99,6 @@ const viaTypes = [
   'Via'        // VI
 ];
 
-// Based on form_address_Example.txt - extended slightly
-const letters = [
-  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-  'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH',
-  'BA', 'BB', 'BC', 'BD', 'BE', 'BF', 'BG', 'BH',
-  'CA', 'CB', 'CC', 'CD', 'CE', 'CF', 'CG', 'CH',
-  'DA', 'DB', 'DC', 'DD', 'DE', 'DF', 'DG', 'DH',
-  'EA', 'EB', 'EC', 'ED', 'EE', 'EF', 'EG', 'EH',
-  'FA', 'FB', 'FC', 'FD', 'FE', 'FF', 'FG', 'FH',
-  'GA', 'GB', 'GC', 'GD', 'GE', 'GF', 'GG', 'GH',
-  'HA', 'HB', 'HC', 'HD', 'HE', 'HF', 'HG', 'HH',
-  // Add more if necessary based on observations
-];
-
 const quadrants = ['Este', 'Norte', 'Oeste', 'Sur'];
 
 interface FormData {
@@ -131,16 +117,18 @@ interface FormData {
   sufijoCardinal2: string;
   num3: string;
   complemento: string;
-  fechaHoraPreferida: Date | null;
-  tipoRecogida: 'inmediata' | 'programada';
+  fechaPreferida: Date | null;
+  turnoPreferido: 'mañana' | 'tarde' | null;
 }
 
-// Add type for errors state
 interface FormErrors {
   nombreMascota?: string;
   tipoMuestra?: string;
   departamento?: string;
   ciudad?: string;
+  direccion?: string;
+  fechaPreferida?: string;
+  turnoPreferido?: string;
   tipoVia?: string;
   numViaP1?: string;
   letraVia?: string;
@@ -151,20 +139,18 @@ interface FormErrors {
   sufijoCardinal2?: string;
   num3?: string;
   complemento?: string;
-  fechaHoraPreferida?: string;
 }
 
 const PickupForm: React.FC = () => {
   const initialNonAddressState = {
     nombreMascota: '',
     tipoMuestra: '',
-    fechaHoraPreferida: null,
-    tipoRecogida: 'programada', // Reset to default pickup type
+    fechaPreferida: null,
+    turnoPreferido: null,
   };
 
-  const [formData, setFormData] = useState<FormData>({
+  const initialFormData: FormData = {
     ...initialNonAddressState,
-    // Address fields start here
     departamento: '',
     ciudad: '',
     tipoVia: '',
@@ -178,16 +164,17 @@ const PickupForm: React.FC = () => {
     sufijoCardinal2: '',
     num3: '',
     complemento: '',
-  });
+  };
+
+  const [formData, setFormData] = useState<FormData>(initialFormData);
 
   const [availableCities, setAvailableCities] = useState<string[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [loading, setLoading] = useState<boolean>(false); // Loading state for submission
-  const [feedback, setFeedback] = useState<{type: 'success' | 'error', message: string} | null>(null); // Feedback state
+  const [loading, setLoading] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
 
-  // Fetch schedule message setting
   useEffect(() => {
     const fetchScheduleMessage = async () => {
       setScheduleLoading(true);
@@ -197,13 +184,12 @@ const PickupForm: React.FC = () => {
           const data = await response.json();
           setScheduleMessage(data.value);
         } else {
-          // Don't block the form if message fails, just log it
           console.warn('Could not load schedule message setting.');
-          setScheduleMessage(null); // Ensure it's null if fetch failed
+          setScheduleMessage(null);
         }
       } catch (err) {
         console.error('Error fetching schedule message:', err);
-        setScheduleMessage(null); // Ensure it's null on error
+        setScheduleMessage(null);
       } finally {
         setScheduleLoading(false);
       }
@@ -211,137 +197,110 @@ const PickupForm: React.FC = () => {
     fetchScheduleMessage();
   }, []);
 
-  // Clear feedback when form data changes
   useEffect(() => {
     if (feedback) {
       setFeedback(null);
     }
-  }, [formData]); // Re-run when formData changes
+  }, [formData]);
 
-  // Function to validate the form
-  const validateForm = (): FormErrors => {
-    const newErrors: FormErrors = {};
-
-    if (!formData.nombreMascota.trim()) newErrors.nombreMascota = 'El nombre de la mascota es obligatorio.';
-    if (!formData.tipoMuestra.trim()) newErrors.tipoMuestra = 'El tipo de muestra es obligatorio.';
-    if (!formData.departamento) newErrors.departamento = 'El departamento es obligatorio.';
-    if (!formData.ciudad) newErrors.ciudad = 'La ciudad es obligatoria.';
-    if (!formData.tipoVia) newErrors.tipoVia = 'El tipo de vía es obligatorio.';
-    if (!formData.numViaP1.trim()) newErrors.numViaP1 = 'El número de vía principal es obligatorio.';
-    if (!formData.numVia2.trim()) newErrors.numVia2 = 'El número de vía generadora es obligatorio.';
-    if (!formData.num3.trim()) newErrors.num3 = 'El número de placa es obligatorio.';
-
-    if (formData.tipoRecogida === 'programada' && !formData.fechaHoraPreferida) {
-      newErrors.fechaHoraPreferida = 'La fecha y hora son obligatorias para recogida programada.';
+  useEffect(() => {
+    setAvailableCities(citiesByDepartment[formData.departamento] || []);
+    if (!citiesByDepartment[formData.departamento]?.includes(formData.ciudad)) {
+      setFormData(prev => ({ ...prev, ciudad: '' }));
+      if(errors.ciudad) setErrors(prev => ({ ...prev, ciudad: undefined }));
     }
-
-    // Basic future date validation for scheduled pickup
-    if (formData.tipoRecogida === 'programada' && formData.fechaHoraPreferida) {
-        const selectedDate = formData.fechaHoraPreferida;
-        const now = new Date();
-        // Add a small buffer (e.g., 1 minute) to prevent validation errors for selecting "now"
-        now.setMinutes(now.getMinutes() - 1);
-        if (selectedDate <= now) {
-             newErrors.fechaHoraPreferida = 'La fecha y hora deben ser futuras.';
-        }
-    }
-
-    return newErrors;
-  };
+  }, [formData.departamento]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFeedback(null); // Clear feedback on input change
+    setFeedback(null);
     const { name, type } = e.target;
     let value = e.target.value;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
 
-    // Input Filtering Logic
     switch (name) {
         case 'numViaP1':
         case 'numVia2':
         case 'num3':
-            // Allow only numbers
             value = value.replace(/[^0-9]/g, '');
             break;
         case 'letraVia':
         case 'letraBis':
-            // Allow only letters (basic A-Z, case-insensitive)
-            // Convert to uppercase for consistency if desired
-            value = value.replace(/[^A-Za-z]/g, ''); //.toUpperCase();
+        case 'letraVia2':
+            value = value.replace(/[^A-Za-z]/g, '');
             break;
-        // Add cases for other fields if specific filtering is needed
-        // e.g., restricting length, allowing specific characters
         default:
-            // No filtering for other fields like nombreMascota, tipoMuestra, selects, complemento
             break;
     }
 
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' 
+                ? checked 
+                : (name === 'turnoPreferido' ? value as 'mañana' | 'tarde' : value)
     }));
 
-    // Clear error for the field being edited
     if (errors[name as keyof FormErrors]) {
-      setErrors(prev => ({ ...prev, [name]: undefined }));
+        setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors[name as keyof FormErrors];
+            if ([ 'tipoVia', 'numViaP1', 'letraVia', 'bis', 'letraBis', 'sufijoCardinal1', 'numVia2', 'letraVia2', 'sufijoCardinal2', 'num3', 'complemento'].includes(name)) {
+                delete newErrors.direccion;
+            }
+            return newErrors;
+        });
     }
-
-    // Update cities when department changes
-    if (name === 'departamento') {
-      setAvailableCities(citiesByDepartment[value] || []);
-      if (!citiesByDepartment[value]?.includes(formData.ciudad)) {
-        setFormData(prev => ({ ...prev, ciudad: '' }));
-        // Clear city error if department changes
-        if(errors.ciudad) setErrors(prev => ({ ...prev, ciudad: undefined }));
-      }
-    }
-
-    // Reset Bis letter if Bis checkbox is unchecked
-    if (name === 'bis' && !checked) {
-      setFormData(prev => ({ ...prev, letraBis: '' }));
-       if(errors.letraBis) setErrors(prev => ({ ...prev, letraBis: undefined }));
-    }
-  };
-
-  const handleRadioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFeedback(null); // Clear feedback on radio change
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value as 'inmediata' | 'programada'
-    }));
-     // Clear date error if switching to immediate pickup
-     if (value === 'inmediata' && errors.fechaHoraPreferida) {
-        setErrors(prev => ({ ...prev, fechaHoraPreferida: undefined }));
-     }
   };
 
   const handleDateChange = (date: Date | null) => {
-    setFeedback(null); // Clear feedback on date change
-    setFormData(prev => ({ ...prev, fechaHoraPreferida: date }));
-    if (errors.fechaHoraPreferida) {
-        setErrors(prev => ({ ...prev, fechaHoraPreferida: undefined }));
+    setFeedback(null);
+    setFormData(prev => ({
+       ...prev,
+       fechaPreferida: date,
+       turnoPreferido: date ? prev.turnoPreferido : null 
+      }));
+    if (errors.fechaPreferida || errors.turnoPreferido) {
+        setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.fechaPreferida;
+            delete newErrors.turnoPreferido;
+            return newErrors;
+        });
     }
   };
 
+  const handleTurnoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFeedback(null);
+      const { value } = e.target;
+      setFormData(prev => ({ ...prev, turnoPreferido: value as 'mañana' | 'tarde' }));
+      if (errors.turnoPreferido) {
+          setErrors(prev => {
+              const newErrors = { ...prev };
+              delete newErrors.turnoPreferido;
+              return newErrors;
+          });
+      }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFeedback(null); // Clear previous feedback
+    setFeedback(null);
     const validationErrors = validateForm();
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length === 0) {
-      setLoading(true); // Start loading
-      // Prepare data for submission (convert Date to ISO string)
+      setLoading(true);
       const submissionData = {
         ...formData,
-        fechaHoraPreferida: formData.fechaHoraPreferida ? formData.fechaHoraPreferida.toISOString() : null,
+        fechaPreferida: formData.fechaPreferida 
+            ? formData.fechaPreferida.toISOString().split('T')[0] 
+            : null,
+        turnoPreferido: formData.turnoPreferido,
+        direccion_completa: generateAddressPreview(),
+        bis: formData.bis ? true : false,
       };
       console.log('Submitting Form Data:', submissionData);
 
-      // --- Send data to backend --- 
       try {
-          // Send to relative path, Nginx will proxy
           const response = await fetch('/api/pickups', { 
              method: 'POST',
              headers: {
@@ -350,21 +309,17 @@ const PickupForm: React.FC = () => {
              body: JSON.stringify(submissionData),
           });
 
-          const result = await response.json(); // Attempt to parse JSON response
+          const result = await response.json();
 
           if (!response.ok) {
-             // Handle HTTP errors (e.g., 400, 500)
              console.error('Backend Error:', result);
              const errorMsg = `Error al enviar la solicitud: ${result.message || response.statusText}`;
              setFeedback({ type: 'error', message: errorMsg });
           } else {
-            // Success
             console.log('Backend Success:', result);
             setFeedback({ type: 'success', message: 'Solicitud enviada exitosamente!'});
-            // Reset form fields except address
             setFormData(prev => ({
-              ...initialNonAddressState, // Reset non-address fields
-              // Keep existing address fields
+              ...initialNonAddressState,
               departamento: prev.departamento,
               ciudad: prev.ciudad,
               tipoVia: prev.tipoVia,
@@ -379,27 +334,22 @@ const PickupForm: React.FC = () => {
               num3: prev.num3,
               complemento: prev.complemento,
             }));
-            // Reset available cities based on current department
             setAvailableCities(citiesByDepartment[formData.departamento] || []);
-            setErrors({}); // Clear any validation errors
+            setErrors({});
           }
 
       } catch (error) {
-        // Handle network errors or issues with fetch itself
         console.error('Network/Fetch Error:', error);
         setFeedback({ type: 'error', message: 'Error de red al enviar la solicitud. Intenta nuevamente.'});
       } finally {
-          setLoading(false); // Stop loading regardless of outcome
+          setLoading(false);
       }
-      // ---------------------------
-
     } else {
       console.log('Validation Errors:', validationErrors);
       setFeedback({ type: 'error', message: 'Por favor corrige los errores en el formulario.' });
     }
   };
   
-  // Generate address preview string based on OSM wiki standard
   const generateAddressPreview = () => {
     let preview = '';
     if (formData.tipoVia) preview += `${formData.tipoVia} `;
@@ -410,7 +360,6 @@ const PickupForm: React.FC = () => {
         if (formData.letraBis) preview += `${formData.letraBis} `;
     }
     if (formData.sufijoCardinal1) preview += `${formData.sufijoCardinal1} `;
-    // Separator for the plaque number part
     if (formData.numVia2 || formData.letraVia2 || formData.sufijoCardinal2 || formData.num3) {
         preview += `# `;
     }
@@ -419,53 +368,58 @@ const PickupForm: React.FC = () => {
     if (formData.sufijoCardinal2) preview += `${formData.sufijoCardinal2} `;
     if (formData.num3) preview += `- ${formData.num3} `;
 
-    // Add complemento at the end, maybe in parentheses or as specified
     if (formData.complemento) preview += ` (${formData.complemento.trim()}) `;
 
-    // Add City and Department
     if (formData.ciudad) preview += `${formData.ciudad}, `;
     if (formData.departamento) preview += `${formData.departamento}`;
 
-    return preview.trim().replace(/ +/g, ' '); // Clean up extra spaces
+    return preview.trim().replace(/ +/g, ' ');
   };
 
   const addressPreview = generateAddressPreview();
 
-  // Helper to get input border class
   const getBorderClass = (fieldName: keyof FormErrors) => {
       return errors[fieldName] ? 'border-red-500' : 'border-gray-300';
   };
 
-  // --- Time constraints for DatePicker ---
-  const filterPassedTime = (time: Date) => {
-    const currentDate = new Date();
-    const selectedDate = new Date(time);
-    return currentDate.getTime() < selectedDate.getTime();
+  const isWeekday = (date: Date) => {
+    const day = date.getDay();
+    return day !== 0; // 0 = Sunday
   };
 
-  let minTime = new Date();
-  minTime.setHours(0, 0, 0, 0); // Default to start of day
-  let maxTime = new Date();
-  maxTime.setHours(23, 59, 59, 999); // Default to end of day
+  const validateForm = (): FormErrors => {
+    const newErrors: FormErrors = {};
 
-  if (formData.fechaHoraPreferida) {
-      const now = new Date();
-      const selectedDay = formData.fechaHoraPreferida;
-      // If selected date is today, restrict minimum time to current time
-      if (selectedDay.toDateString() === now.toDateString()) {
-          minTime.setHours(now.getHours(), now.getMinutes() + 1); // Start from next minute
-      }
-       // Example: Restrict hours if needed (e.g., 8 AM to 6 PM)
-      // minTime = new Date(selectedDay.setHours(8, 0, 0, 0));
-      // maxTime = new Date(selectedDay.setHours(18, 0, 0, 0));
-  }
-  // ----------------------------------------
-  
+    if (!formData.nombreMascota.trim()) newErrors.nombreMascota = 'El nombre de la mascota es obligatorio.';
+    if (!formData.tipoMuestra.trim()) newErrors.tipoMuestra = 'El tipo de muestra es obligatorio.';
+    if (!formData.departamento) newErrors.departamento = 'El departamento es obligatorio.';
+    if (!formData.ciudad) newErrors.ciudad = 'La ciudad es obligatoria.';
+    if (!formData.tipoVia) newErrors.tipoVia = 'El tipo de vía es obligatorio.';
+    if (!formData.numViaP1.trim()) newErrors.numViaP1 = 'El número de vía principal es obligatorio.';
+    if (!formData.numVia2.trim()) newErrors.numVia2 = 'El número de vía generadora es obligatorio.';
+    if (!formData.num3.trim()) newErrors.num3 = 'El número de placa es obligatorio.';
+
+    if (formData.fechaPreferida) {
+        const selectedDate = formData.fechaPreferida;
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        if (selectedDate < now) {
+             newErrors.fechaPreferida = 'La fecha no puede ser pasada.';
+        }
+        if (!formData.turnoPreferido) {
+            newErrors.turnoPreferido = 'Debes seleccionar un turno (Mañana o Tarde).';
+        }
+    } else if (formData.turnoPreferido) {
+        newErrors.fechaPreferida = 'Debes seleccionar una fecha para elegir un turno.';
+    }
+
+    return newErrors;
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-8 bg-white shadow-lg rounded-lg">
       <h2 className="text-2xl font-semibold mb-6 text-gray-700">Solicitar recolección de muestra</h2>
       
-      {/* Display Schedule Message */} 
       {!scheduleLoading && scheduleMessage && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md flex items-start space-x-3">
           <FaInfoCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -477,7 +431,6 @@ const PickupForm: React.FC = () => {
       
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {/* Pet Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="nombreMascota" className="block text-sm font-medium text-gray-700 mb-1">Nombre del solicitante (CV, Medico etc.)*</label>
@@ -500,20 +453,17 @@ const PickupForm: React.FC = () => {
               value={formData.tipoMuestra}
               onChange={handleInputChange}
               className={`w-full px-3 py-2 border ${getBorderClass('tipoMuestra')} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500`}
-              placeholder="Ej: Sangre, Orina, Heces"
+              
             />
              {errors.tipoMuestra && <p className="text-red-500 text-xs mt-1">{errors.tipoMuestra}</p>}
           </div>
         </div>
 
-        {/* Address Section Header - Refined */}
-        <div className="pb-2 border-b border-gray-200"> {/* Added border-b, removed hr below */}
+        <div className="pb-2 border-b border-gray-200">
           <label className="text-lg font-semibold text-gray-800">Dirección de Recogida</label>
           <p className="text-xs text-gray-500 mb-1">Basado en nomenclatura estándar. Ver <a href="https://wiki.openstreetmap.org/wiki/ES:Colombia/Gu%C3%ADa_para_mapear/nomenclatura_para_calles" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">guía OSM</a>.</p>
-          {/* Removed <hr className="my-2" /> */}
         </div>
 
-        {/* Department and City */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
            <div>
             <label htmlFor="departamento" className="block text-sm font-medium text-gray-700 mb-1">Departamento*</label>
@@ -546,8 +496,6 @@ const PickupForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Address Line 1 (Tipo Via, Num, Letra, Bis, LetraBis, Sufijo) */}
-        {/* Adjusted grid layout for Bis checkbox */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-4 items-end">
           <div className="md:col-span-2">
             <label htmlFor="tipoVia" className="block text-sm font-medium text-gray-700 mb-1">Tipo Vía*</label>
@@ -577,20 +525,19 @@ const PickupForm: React.FC = () => {
           </div>
           <div>
             <label htmlFor="letraVia" className="block text-sm font-medium text-gray-700 mb-1">Letra</label>
-             <select
+             <input
+              type="text"
               id="letraVia"
               name="letraVia"
               value={formData.letraVia}
               onChange={handleInputChange}
+              maxLength={2}
+              pattern="[A-Za-z]*"
               className={`w-full px-3 py-2 border ${getBorderClass('letraVia')} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 bg-white`}
-            >
-              <option value="">Selecciona...</option>
-              {letters.map(letter => <option key={letter} value={letter}>{letter}</option>)}
-            </select>
+            />
           </div>
-          {/* Bis Checkbox and Letter - occupies 2 cols potentially */}
           <div className="flex flex-col justify-end">
-             <div className="flex items-center h-[38px]"> {/* Align with input height */} 
+             <div className="flex items-center h-[38px]">
                <input
                 type="checkbox"
                 id="bis"
@@ -601,26 +548,25 @@ const PickupForm: React.FC = () => {
               />
               <label htmlFor="bis" className="text-sm font-medium text-gray-700">Bis</label>
             </div>
-            <div className="h-[1.125rem]"></div> {/* Placeholder for potential error message height */} 
+            <div className="h-[1.125rem]"></div>
           </div>
           <div>
             <label htmlFor="letraBis" className="block text-sm font-medium text-gray-700 mb-1">Letra (Bis)</label>
-             <select
+             <input
+              type="text"
               id="letraBis"
               name="letraBis"
               value={formData.letraBis}
               onChange={handleInputChange}
-              disabled={!formData.bis} // Disable if Bis is not checked
+              maxLength={2}
+              pattern="[A-Za-z]*"
+              disabled={!formData.bis}
               className={`w-full px-3 py-2 border ${getBorderClass('letraBis')} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 bg-white disabled:bg-gray-100`}
-            >
-              <option value="">Selecciona...</option>
-              {letters.map(letter => <option key={letter} value={letter}>{letter}</option>)}
-            </select>
+            />
           </div>
 
         </div>
 
-        {/* Address Line 1 Continue (Sufijo Cardinal 1) */}
          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div>
                 <label htmlFor="sufijoCardinal1" className="block text-sm font-medium text-gray-700 mb-1">Sufijo Cardinal</label>
@@ -635,15 +581,13 @@ const PickupForm: React.FC = () => {
                   {quadrants.map(quad => <option key={quad} value={quad}>{quad}</option>)}
                 </select>
             </div>
-            {/* Placeholder divs to maintain grid structure if needed */}
             <div className="hidden md:block"></div>
             <div className="hidden md:block"></div>
             <div className="hidden md:block"></div>
         </div>
 
-        {/* Address Line 2 (# Num, Letra, Sufijo Cardinal 2, - NumPlaca ) */}
          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
-           <div className="relative pt-5"> {/* pt-5 to align label nicely with # */}
+           <div className="relative pt-5">
             <span className="absolute left-0 bottom-2.5 text-gray-500 text-lg font-semibold px-1">#</span>
             <label htmlFor="numVia2" className="block text-sm font-medium text-gray-700 mb-1 pl-4">Número*</label>
             <input
@@ -658,16 +602,16 @@ const PickupForm: React.FC = () => {
           </div>
           <div>
              <label htmlFor="letraVia2" className="block text-sm font-medium text-gray-700 mb-1">Letra</label>
-             <select
+             <input
+              type="text"
               id="letraVia2"
               name="letraVia2"
               value={formData.letraVia2}
               onChange={handleInputChange}
+              maxLength={2}
+              pattern="[A-Za-z]*"
               className={`w-full px-3 py-2 border ${getBorderClass('letraVia2')} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 bg-white`}
-            >
-              <option value="">Selecciona...</option>
-              {letters.map(letter => <option key={letter} value={letter}>{letter}</option>)}
-            </select>
+            />
           </div>
           <div>
              <label htmlFor="sufijoCardinal2" className="block text-sm font-medium text-gray-700 mb-1">Sufijo Cardinal</label>
@@ -682,7 +626,7 @@ const PickupForm: React.FC = () => {
               {quadrants.map(quad => <option key={quad} value={quad}>{quad}</option>)}
             </select>
           </div>
-           <div className="relative pt-5"> {/* pt-5 to align label nicely with - */}
+           <div className="relative pt-5">
              <span className="absolute left-0 bottom-2.5 text-gray-500 text-lg font-semibold px-1">-</span>
             <label htmlFor="num3" className="block text-sm font-medium text-gray-700 mb-1 pl-4">Número (Placa)*</label>
             <input
@@ -697,7 +641,6 @@ const PickupForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Address Line 3 (Complemento Details) */}
         <div>
            <label htmlFor="complemento" className="block text-sm font-medium text-gray-700 mb-1">Datos adicionales (Ej: Apto, Interior, Torre, Casa, Unidad, Casa, otros)</label>
             <input
@@ -711,67 +654,66 @@ const PickupForm: React.FC = () => {
             />
         </div>
 
-         {/* Address Preview - Refined */}
-        {addressPreview && (
-           <div className="mt-4 p-4 bg-indigo-50 rounded border border-indigo-200"> {/* Changed bg, border, padding */}
+         {addressPreview && (
+           <div className="mt-4 p-4 bg-indigo-50 rounded border border-indigo-200">
               <p className="text-sm font-medium text-gray-600">Vista Previa Dirección:</p>
-              <p className="text-sm text-gray-800 font-mono">{addressPreview}</p> {/* Added font-mono for address */}
+              <p className="text-sm text-gray-800 font-mono">{addressPreview}</p>
            </div>
         )}
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+           <div className="relative z-10">
+             <label htmlFor="fechaPreferida" className="block text-sm font-medium text-gray-700 mb-1">Fecha Preferida</label>
+             <DatePicker
+               selected={formData.fechaPreferida}
+               onChange={handleDateChange}
+               minDate={new Date()}
+               locale="es"
+               dateFormat="dd/MM/yyyy"
+               placeholderText="Opcional: Selecciona fecha..."
+               className={`w-full px-3 py-2 border ${getBorderClass('fechaPreferida')} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed`}
+               wrapperClassName="w-full"
+               autoComplete="off"
+               filterDate={isWeekday}
+             />
+              {errors.fechaPreferida && <p className="text-red-500 text-xs mt-1">{errors.fechaPreferida}</p>}
+           </div>
 
-        {/* Pickup Schedule */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="relative z-10"> {/* Add z-index for DatePicker overlay */}
-            <label htmlFor="fechaHoraPreferida" className="block text-sm font-medium text-gray-700 mb-1">Fecha y Hora Preferida{formData.tipoRecogida === 'programada' ? '*' : ''}</label>
-            <DatePicker
-              selected={formData.fechaHoraPreferida}
-              onChange={handleDateChange}
-              showTimeSelect
-              filterTime={filterPassedTime} // Use filterTime for more dynamic time filtering
-              minDate={new Date()} // Prevent selecting past dates
-              locale="es" // Use Spanish locale
-              dateFormat="dd/MM/yyyy HH:mm" // Format for display
-              placeholderText="Selecciona fecha y hora..."
-              disabled={formData.tipoRecogida === 'inmediata'}
-              className={`w-full px-3 py-2 border ${getBorderClass('fechaHoraPreferida')} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed`}
-              wrapperClassName="w-full" // Ensure wrapper takes full width
-              autoComplete="off"
-            />
-             {errors.fechaHoraPreferida && <p className="text-red-500 text-xs mt-1">{errors.fechaHoraPreferida}</p>}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">Tipo de Recogida*</label>
-            <div className="flex items-center space-x-6">
-               <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="tipoRecogida"
-                  value="programada"
-                  checked={formData.tipoRecogida === 'programada'}
-                  onChange={handleRadioChange}
-                  className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300"
-                />
-                <span className="ml-2 text-sm text-gray-700">Programada</span>
-              </label>
-               <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="tipoRecogida"
-                  value="inmediata"
-                  checked={formData.tipoRecogida === 'inmediata'}
-                  onChange={handleRadioChange}
-                  className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300"
-                />
-                 <span className="ml-2 text-sm text-gray-700">Inmediata (Próximo Conductor)</span>
-              </label>
-            </div>
-          </div>
+           <div>
+             <label className={`block text-sm font-medium mb-1 ${!formData.fechaPreferida ? 'text-gray-400' : 'text-gray-700'}`}>
+                 Turno Preferido {formData.fechaPreferida ? '*' : ''}
+             </label>
+             <div className={`flex items-center space-x-6 mt-2 ${!formData.fechaPreferida ? 'opacity-50' : ''}`}>
+                <label className="flex items-center">
+                 <input
+                   type="radio"
+                   name="turnoPreferido"
+                   value="mañana"
+                   checked={formData.turnoPreferido === 'mañana'}
+                   onChange={handleTurnoChange}
+                   disabled={!formData.fechaPreferida}
+                   className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 disabled:cursor-not-allowed"
+                 />
+                 <span className={`ml-2 text-sm ${!formData.fechaPreferida ? 'text-gray-400' : 'text-gray-700'}`}>Mañana (9 AM - 12 PM aprox.)</span>
+               </label>
+                <label className="flex items-center">
+                 <input
+                   type="radio"
+                   name="turnoPreferido"
+                   value="tarde"
+                   checked={formData.turnoPreferido === 'tarde'}
+                   onChange={handleTurnoChange}
+                   disabled={!formData.fechaPreferida}
+                   className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 disabled:cursor-not-allowed"
+                 />
+                  <span className={`ml-2 text-sm ${!formData.fechaPreferida ? 'text-gray-400' : 'text-gray-700'}`}>Tarde (1 PM - 5 PM aprox.)</span>
+               </label>
+             </div>
+              {errors.turnoPreferido && <p className="text-red-500 text-xs mt-1">{errors.turnoPreferido}</p>}
+           </div>
         </div>
 
-        {/* Submit Button & Feedback */} 
         <div className="pt-4">
-          {/* Feedback Area */} 
           {feedback && (
             <div 
               className={`mb-4 p-3 rounded text-sm ${ 
@@ -786,10 +728,10 @@ const PickupForm: React.FC = () => {
 
           <button
             type="submit"
-            disabled={loading} // Disable button when loading
+            disabled={loading}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Enviando...' : 'Enviar Solicitud'} {/* Change text when loading */}
+            {loading ? 'Enviando...' : 'Enviar Solicitud'}
           </button>
         </div>
 
