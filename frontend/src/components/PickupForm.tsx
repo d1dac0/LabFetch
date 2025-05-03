@@ -460,10 +460,10 @@ const PickupForm: React.FC = () => {
       // maxTime = new Date(selectedDay.setHours(18, 0, 0, 0));
   }
   // ----------------------------------------
-
+  
   return (
     <div className="max-w-4xl mx-auto p-8 bg-white shadow-lg rounded-lg">
-      <h2 className="text-2xl font-semibold mb-6 text-gray-700">Solicitar Recogida de Muestra</h2>
+      <h2 className="text-2xl font-semibold mb-6 text-gray-700">Solicitar recolección de muestra</h2>
       
       {/* Display Schedule Message */} 
       {!scheduleLoading && scheduleMessage && (
@@ -480,7 +480,7 @@ const PickupForm: React.FC = () => {
         {/* Pet Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label htmlFor="nombreMascota" className="block text-sm font-medium text-gray-700 mb-1">Nombre de la Mascota*</label>
+            <label htmlFor="nombreMascota" className="block text-sm font-medium text-gray-700 mb-1">Nombre del solicitante (CV, Medico etc.)*</label>
             <input
               type="text"
               id="nombreMascota"
@@ -492,7 +492,7 @@ const PickupForm: React.FC = () => {
             {errors.nombreMascota && <p className="text-red-500 text-xs mt-1">{errors.nombreMascota}</p>}
           </div>
           <div>
-            <label htmlFor="tipoMuestra" className="block text-sm font-medium text-gray-700 mb-1">Tipo de Muestra*</label>
+            <label htmlFor="tipoMuestra" className="block text-sm font-medium text-gray-700 mb-1">Numero de contacto/emergencia de quien entrega*</label>
             <input
               type="text"
               id="tipoMuestra"
@@ -699,7 +699,7 @@ const PickupForm: React.FC = () => {
 
         {/* Address Line 3 (Complemento Details) */}
         <div>
-           <label htmlFor="complemento" className="block text-sm font-medium text-gray-700 mb-1">Complemento Adicional</label>
+           <label htmlFor="complemento" className="block text-sm font-medium text-gray-700 mb-1">Datos adicionales (Ej: Apto, Interior, Torre, Casa, Unidad, Casa, otros)</label>
             <input
               type="text"
               id="complemento"

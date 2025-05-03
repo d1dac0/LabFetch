@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale/es';
-import { PICKUP_STATUSES, statusValues, getStatusConfig } from '../../config/pickupStatuses'; // Import status config
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+  type ColumnFiltersState,
+} from '@tanstack/react-table';
+import { PICKUP_STATUSES, getStatusConfig } from '../../config/pickupStatuses';
 
 interface Pickup {
   id: number;
@@ -15,24 +24,20 @@ interface Pickup {
   created_at: string; 
 }
 
-// Define types for sorting
-type SortColumn = keyof Pickup | null;
-type SortDirection = 'asc' | 'desc';
-
-// Define possible status values using the config
-type PickupStatus = typeof statusValues[number] | 'all';
-
 const AdminDashboardPage: React.FC = () => {
   const [pickups, setPickups] = useState<Pickup[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [newPickupIds, setNewPickupIds] = useState<Set<number>>(new Set());
-  const [sortColumn, setSortColumn] = useState<SortColumn>('created_at'); // Adjusted default sort key
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [filterStatus, setFilterStatus] = useState<PickupStatus>('all'); // State for status filter
-  const [searchTerm, setSearchTerm] = useState<string>(''); // State for search term
 
-  const navigate = useNavigate(); // Hook for navigation
+  // --- TanStack Table State ---
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'created_at', desc: true }, // Initial sort
+  ]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [globalFilter, setGlobalFilter] = useState(''); // For the main search box
+
+  const navigate = useNavigate();
 
   // Function to fetch initial data
   const fetchInitialPickups = async () => {
@@ -53,7 +58,7 @@ const AdminDashboardPage: React.FC = () => {
       if (!response.ok) {
          if (response.status === 401) {
             // Handle unauthorized specifically, e.g., redirect to login
-            // navigate('/admin/login'); // Assuming navigate is available
+            navigate('/admin/login'); // Assuming navigate is available
              throw new Error('Unauthorized: Please log in again.');
          }
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -127,72 +132,96 @@ const AdminDashboardPage: React.FC = () => {
       eventSource.close();
     };
 
-  }, []); // Run only once on component mount
+  }, [navigate]); // Run only once on component mount
 
-  // --- Filtering and Sorting Logic ---
-  const filteredAndSortedPickups = useMemo(() => {
-    // 1. Filter by Status
-    const statusFiltered = filterStatus === 'all' 
-      ? pickups 
-      : pickups.filter(pickup => pickup.status === filterStatus);
-      
-    // 2. Filter by Search Term (searches across multiple fields)
-    const searchFiltered = !searchTerm
-      ? statusFiltered
-      : statusFiltered.filter(pickup => {
-          const term = searchTerm.toLowerCase();
-          const formattedDate = new Date(pickup.created_at).toLocaleString('es-CO').toLowerCase();
-          const statusDisplay = getStatusConfig(pickup.status)?.displayName.toLowerCase() ?? pickup.status.toLowerCase();
+  // --- TanStack Table Column Definitions ---
+  const columns = useMemo<ColumnDef<Pickup>[]>(() => [
+      {
+        accessorKey: 'id',
+        header: ({ column }) => (
+          <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+            ID
+            {{ asc: ' ▲', desc: ' ▼' }[column.getIsSorted() as string] ?? null}
+          </button>
+        ),
+        cell: info => info.getValue(),
+      },
+      {
+        accessorKey: 'nombre_mascota',
+        header: ({ column }) => (
+          <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+            Mascota
+            {{ asc: ' ▲', desc: ' ▼' }[column.getIsSorted() as string] ?? null}
+          </button>
+        ),
+        cell: info => info.getValue(),
+      },
+      {
+        accessorKey: 'tipo_muestra',
+        header: 'Muestra',
+        cell: info => info.getValue(),
+      },
+      { // Combine city and department for Ubicacion
+        id: 'ubicacion',
+        header: 'Ubicación',
+        accessorFn: row => `${row.ciudad}, ${row.departamento}`, // Create combined value
+        cell: info => info.getValue(),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Estado',
+        cell: info => {
+            const statusValue = info.getValue() as string;
+            const config = getStatusConfig(statusValue);
+            return (
+              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ 
+                config?.badgeClasses ?? 'bg-gray-100 text-gray-800'
+               }`}>
+                 {config?.displayName ?? statusValue}
+              </span>
+            );
+        },
+        filterFn: 'equalsString', // Use built-in equals filter for status column
+      },
+      {
+        accessorKey: 'created_at',
+        header: ({ column }) => (
+          <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+            Fecha Creación
+            {{ asc: ' ▲', desc: ' ▼' }[column.getIsSorted() as string] ?? null}
+          </button>
+        ),
+        cell: info => new Date(info.getValue() as string).toLocaleString('es-CO'),
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        cell: ({ row }) => (
+          <Link to={`/admin/pickups/${row.original.id}`} className="text-indigo-600 hover:text-indigo-900">
+            Detalles
+          </Link>
+        ),
+      },
+    ], []); // Empty dependency array, columns definition doesn't change
 
-          return (
-            pickup.id.toString().includes(term) ||
-            pickup.nombre_mascota.toLowerCase().includes(term) ||
-            pickup.tipo_muestra.toLowerCase().includes(term) ||
-            pickup.ciudad.toLowerCase().includes(term) ||
-            pickup.departamento.toLowerCase().includes(term) ||
-            statusDisplay.includes(term) || // Search displayed status name
-            formattedDate.includes(term) // Search formatted date
-          );
-        });
-
-    // 3. Sort
-    if (!sortColumn) return searchFiltered; // Return filtered if no sort column
-
-    return [...searchFiltered].sort((a, b) => {
-      const aValue = a[sortColumn];
-      const bValue = b[sortColumn];
-
-      // Basic comparison, extend for different types (date, number)
-      let comparison = 0;
-      if (sortColumn === 'created_at') {
-          comparison = new Date(aValue).getTime() - new Date(bValue).getTime();
-      } else if (aValue < bValue) {
-        comparison = -1;
-      } else if (aValue > bValue) {
-        comparison = 1;
-      }
-
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-  }, [pickups, filterStatus, searchTerm, sortColumn, sortDirection]); // Add searchTerm dependency
-
-  const handleSort = (column: SortColumn) => {
-    if (!column) return;
-    const direction = sortColumn === column && sortDirection === 'asc' ? 'desc' : 'asc';
-    setSortColumn(column);
-    setSortDirection(direction);
-  };
-
-  // Helper to get sort indicator
-  const getSortIndicator = (column: SortColumn) => {
-    if (sortColumn !== column) return null;
-    return sortDirection === 'asc' ? ' ▲' : ' ▼';
-  };
-
-  // Handler for filter button clicks
-  const handleFilterChange = (status: PickupStatus) => {
-      setFilterStatus(status);
-  };
+  // --- TanStack Table Instance ---
+  const table = useReactTable({
+    data: pickups,
+    columns,
+    state: {
+      sorting,
+      columnFilters,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    debugTable: process.env.NODE_ENV !== 'production', // Enable debug logs in dev
+  });
 
   // --- Render Logic --- 
 
@@ -224,13 +253,11 @@ const AdminDashboardPage: React.FC = () => {
 
       {/* Search Input */} 
       <div className="mb-4">
-          <label htmlFor="search" className="sr-only">Buscar</label> {/* Screen reader label */} 
           <input 
               type="text"
-              id="search"
+              value={globalFilter ?? ''}
+              onChange={e => setGlobalFilter(String(e.target.value))}
               placeholder="Buscar en todas las columnas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full md:w-1/3 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           />
       </div>
@@ -239,18 +266,18 @@ const AdminDashboardPage: React.FC = () => {
       <div className="mb-4 flex flex-wrap gap-2 items-center">
          <span className="text-sm font-medium text-gray-600 mr-2">Filtrar por Estado:</span>
           <button 
-              onClick={() => handleFilterChange('all')}
-              className={`px-3 py-1 text-sm rounded ${filterStatus === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              onClick={() => table.getColumn('status')?.setFilterValue(undefined)} // Clear filter
+              className={`px-3 py-1 text-sm rounded ${!table.getColumn('status')?.getFilterValue() ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
             >
               Todos
             </button>
           {PICKUP_STATUSES.map(statusConfig => (
               <button 
                   key={statusConfig.value}
-                  onClick={() => handleFilterChange(statusConfig.value as PickupStatus)} // Use config value
-                  className={`px-3 py-1 text-sm rounded ${filterStatus === statusConfig.value ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  onClick={() => table.getColumn('status')?.setFilterValue(statusConfig.value)} 
+                  className={`px-3 py-1 text-sm rounded ${table.getColumn('status')?.getFilterValue() === statusConfig.value ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
               >
-                  {statusConfig.displayName} {/* Use display name */}
+                  {statusConfig.displayName}
               </button>
           ))}
       </div>
@@ -258,62 +285,116 @@ const AdminDashboardPage: React.FC = () => {
       <div className="overflow-x-auto shadow-md rounded-lg">
         <table className="min-w-full bg-white">
           <thead className="bg-gray-100">
-            <tr>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                onClick={() => handleSort('id')} // Make ID sortable
-              >
-                ID {getSortIndicator('id')}
-              </th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                onClick={() => handleSort('nombre_mascota')} // Make Mascota sortable
-              >
-                Mascota {getSortIndicator('nombre_mascota')}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Muestra</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-              <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                onClick={() => handleSort('created_at')}
-              >
-                Fecha Creación {getSortIndicator('created_at')}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-            </tr>
+            {table.getHeaderGroups().map(headerGroup => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map(header => (
+                  <th 
+                    key={header.id}
+                    colSpan={header.colSpan}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </th>
+                ))}
+              </tr>
+            ))}
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {filteredAndSortedPickups.length > 0 ? (
-              filteredAndSortedPickups.map((pickup) => (
-                <tr key={pickup.id} className={`hover:bg-gray-50 ${newPickupIds.has(pickup.id) ? 'new-pickup-highlight' : ''}`}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pickup.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{pickup.nombre_mascota}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{pickup.tipo_muestra}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{pickup.ciudad}, {pickup.departamento}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ 
-                      getStatusConfig(pickup.status)?.badgeClasses ?? 'bg-gray-100 text-gray-800' // Use config for classes
-                    }`}>
-                      {getStatusConfig(pickup.status)?.displayName ?? pickup.status} {/* Use config for display name */}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{new Date(pickup.created_at).toLocaleString('es-CO')}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link to={`/admin/pickups/${pickup.id}`} className="text-indigo-600 hover:text-indigo-900">
-                      Detalles
-                    </Link>
-                  </td>
+            {table.getRowModel().rows.length > 0 ? (
+              table.getRowModel().rows.map(row => (
+                <tr key={row.id} className={`hover:bg-gray-50 ${newPickupIds.has(row.original.id) ? 'new-pickup-highlight' : ''}`}>
+                  {row.getVisibleCells().map(cell => (
+                    <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </td>
+                  ))}
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">No hay solicitudes pendientes.</td>
+                <td colSpan={columns.length} className="px-6 py-4 text-center text-sm text-gray-500">
+                  No se encontraron resultados.
+                </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */} 
+      <div className="flex items-center justify-between gap-2 mt-4 flex-wrap">
+        <span className="text-sm text-gray-700">
+          Página{' '}
+          <strong>
+            {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+          </strong>
+        </span>
+        <div className="flex items-center gap-2">
+            <button
+              className="border rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+            >
+              {'<<'}
+            </button>
+            <button
+               className="border rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              {'<'}
+            </button>
+            <button
+               className="border rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              {'>'}
+            </button>
+            <button
+               className="border rounded px-2 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              disabled={!table.getCanNextPage()}
+            >
+              {'>>'}
+            </button>
+        </div>
+        <span className="flex items-center gap-1 text-sm">
+          <div>Ir a página:</div>
+          <input
+            type="number"
+            defaultValue={table.getState().pagination.pageIndex + 1}
+            onChange={e => {
+              const page = e.target.value ? Number(e.target.value) - 1 : 0;
+              table.setPageIndex(page);
+            }}
+            className="border p-1 rounded w-16 text-sm"
+          />
+        </span>
+        <select
+          value={table.getState().pagination.pageSize}
+          onChange={e => {
+            table.setPageSize(Number(e.target.value));
+          }}
+           className="border p-1 rounded text-sm"
+        >
+          {[10, 20, 30, 40, 50].map(pageSize => (
+            <option key={pageSize} value={pageSize}>
+              Mostrar {pageSize}
+            </option>
+          ))}
+        </select>
+      </div>
+
     </div>
   );
 };

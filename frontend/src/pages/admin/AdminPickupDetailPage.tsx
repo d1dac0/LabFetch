@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getStatusConfig, PICKUP_STATUSES } from '../../config/pickupStatuses'; // Import status config
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { PICKUP_STATUSES, getStatusConfig } from '../../config/pickupStatuses'; // Import status config
 
 // TODO: Define a more detailed Pickup type if needed (matching DB schema)
 interface PickupDetail {
@@ -42,6 +42,8 @@ const AdminPickupDetailPage: React.FC = () => {
   const [editStatus, setEditStatus] = useState<string>('');
   const [editDriverId, setEditDriverId] = useState<string>(''); // Use string for input
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null); // State for success message
+  const [errorMessage, setErrorMessage] = useState<string | null>(null); // State for save errors
 
   useEffect(() => {
     const fetchPickupDetail = async () => {
@@ -92,7 +94,8 @@ const AdminPickupDetailPage: React.FC = () => {
   const handleSaveChanges = async () => {
     if (!id || !pickup) return;
     setIsSaving(true);
-    setError(null);
+    setSuccessMessage(null); // Clear previous messages
+    setErrorMessage(null);
 
     const updateData: { status?: string, driver_id?: number | null } = {};
     if (editStatus !== pickup.status) {
@@ -102,7 +105,7 @@ const AdminPickupDetailPage: React.FC = () => {
     if (driverIdNumber !== pickup.driver_id) {
         // Check if parsing failed for non-empty string
         if (editDriverId && isNaN(driverIdNumber as number)) {
-            setError('ID de Conductor debe ser un número.');
+            setErrorMessage('ID de Conductor debe ser un número.');
             setIsSaving(false);
             return;
         }
@@ -110,7 +113,7 @@ const AdminPickupDetailPage: React.FC = () => {
     }
 
     if (Object.keys(updateData).length === 0) {
-        setError('No hay cambios para guardar.');
+        setSuccessMessage("No hay cambios para guardar.");
         setIsSaving(false);
         return;
     }
@@ -140,14 +143,14 @@ const AdminPickupDetailPage: React.FC = () => {
         setPickup(result.pickup); // Update local state with returned data
         setEditStatus(result.pickup.status);
         setEditDriverId(result.pickup.driver_id?.toString() || '');
-        alert('Cambios guardados exitosamente!');
+        setSuccessMessage('Cambios guardados exitosamente!');
     } catch (err: unknown) {
         console.error("Error saving changes:", err);
         let message = 'Error al guardar los cambios.';
         if (err instanceof Error) {
             message = err.message;
         }
-        setError(message);
+        setErrorMessage(message);
     } finally {
         setIsSaving(false);
     }
@@ -217,7 +220,8 @@ const AdminPickupDetailPage: React.FC = () => {
           >
             {isSaving ? 'Guardando...' : 'Guardar Cambios'}
           </button>
-          {error && <p className="text-red-500 text-xs mt-1">{error}</p>} {/* Show save errors here */} 
+          {successMessage && <p className="text-green-500 text-xs mt-1">{successMessage}</p>}
+          {errorMessage && <p className="text-red-500 text-xs mt-1">{errorMessage}</p>}
         </div>
       </div>
 
