@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DatePicker, { registerLocale } from "react-datepicker";
 import { es } from 'date-fns/locale/es';
 import "react-datepicker/dist/react-datepicker.css";
+import { FaInfoCircle } from 'react-icons/fa';
 
 registerLocale('es', es);
 
@@ -154,9 +155,16 @@ interface FormErrors {
 }
 
 const PickupForm: React.FC = () => {
-  const [formData, setFormData] = useState<FormData>({
+  const initialNonAddressState = {
     nombreMascota: '',
     tipoMuestra: '',
+    fechaHoraPreferida: null,
+    tipoRecogida: 'programada', // Reset to default pickup type
+  };
+
+  const [formData, setFormData] = useState<FormData>({
+    ...initialNonAddressState,
+    // Address fields start here
     departamento: '',
     ciudad: '',
     tipoVia: '',
@@ -170,12 +178,45 @@ const PickupForm: React.FC = () => {
     sufijoCardinal2: '',
     num3: '',
     complemento: '',
-    fechaHoraPreferida: null,
-    tipoRecogida: 'programada',
   });
 
   const [availableCities, setAvailableCities] = useState<string[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [loading, setLoading] = useState<boolean>(false); // Loading state for submission
+  const [feedback, setFeedback] = useState<{type: 'success' | 'error', message: string} | null>(null); // Feedback state
+  const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
+
+  // Fetch schedule message setting
+  useEffect(() => {
+    const fetchScheduleMessage = async () => {
+      setScheduleLoading(true);
+      try {
+        const response = await fetch('/api/settings/pickup_schedule_message');
+        if (response.ok) {
+          const data = await response.json();
+          setScheduleMessage(data.value);
+        } else {
+          // Don't block the form if message fails, just log it
+          console.warn('Could not load schedule message setting.');
+          setScheduleMessage(null); // Ensure it's null if fetch failed
+        }
+      } catch (err) {
+        console.error('Error fetching schedule message:', err);
+        setScheduleMessage(null); // Ensure it's null on error
+      } finally {
+        setScheduleLoading(false);
+      }
+    };
+    fetchScheduleMessage();
+  }, []);
+
+  // Clear feedback when form data changes
+  useEffect(() => {
+    if (feedback) {
+      setFeedback(null);
+    }
+  }, [formData]); // Re-run when formData changes
 
   // Function to validate the form
   const validateForm = (): FormErrors => {
@@ -209,6 +250,7 @@ const PickupForm: React.FC = () => {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setFeedback(null); // Clear feedback on input change
     const { name, type } = e.target;
     let value = e.target.value;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
@@ -262,6 +304,7 @@ const PickupForm: React.FC = () => {
   };
 
   const handleRadioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFeedback(null); // Clear feedback on radio change
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -274,6 +317,7 @@ const PickupForm: React.FC = () => {
   };
 
   const handleDateChange = (date: Date | null) => {
+    setFeedback(null); // Clear feedback on date change
     setFormData(prev => ({ ...prev, fechaHoraPreferida: date }));
     if (errors.fechaHoraPreferida) {
         setErrors(prev => ({ ...prev, fechaHoraPreferida: undefined }));
@@ -282,10 +326,12 @@ const PickupForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFeedback(null); // Clear previous feedback
     const validationErrors = validateForm();
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length === 0) {
+      setLoading(true); // Start loading
       // Prepare data for submission (convert Date to ISO string)
       const submissionData = {
         ...formData,
@@ -309,30 +355,47 @@ const PickupForm: React.FC = () => {
           if (!response.ok) {
              // Handle HTTP errors (e.g., 400, 500)
              console.error('Backend Error:', result);
-             // Use message from backend response if available, otherwise use default
-             alert(`Error al enviar la solicitud: ${result.message || response.statusText}`);
+             const errorMsg = `Error al enviar la solicitud: ${result.message || response.statusText}`;
+             setFeedback({ type: 'error', message: errorMsg });
           } else {
             // Success
             console.log('Backend Success:', result);
-            alert('Solicitud enviada exitosamente!');
-            // Optionally reset form here
-            /*
-            setFormData({ ...initial state... }); // Need to define initialState constant
-            setAvailableCities([]);
-            setErrors({});
-            */
+            setFeedback({ type: 'success', message: 'Solicitud enviada exitosamente!'});
+            // Reset form fields except address
+            setFormData(prev => ({
+              ...initialNonAddressState, // Reset non-address fields
+              // Keep existing address fields
+              departamento: prev.departamento,
+              ciudad: prev.ciudad,
+              tipoVia: prev.tipoVia,
+              numViaP1: prev.numViaP1,
+              letraVia: prev.letraVia,
+              bis: prev.bis,
+              letraBis: prev.letraBis,
+              sufijoCardinal1: prev.sufijoCardinal1,
+              numVia2: prev.numVia2,
+              letraVia2: prev.letraVia2,
+              sufijoCardinal2: prev.sufijoCardinal2,
+              num3: prev.num3,
+              complemento: prev.complemento,
+            }));
+            // Reset available cities based on current department
+            setAvailableCities(citiesByDepartment[formData.departamento] || []);
+            setErrors({}); // Clear any validation errors
           }
 
       } catch (error) {
         // Handle network errors or issues with fetch itself
         console.error('Network/Fetch Error:', error);
-        alert('Error de red al enviar la solicitud. Intenta nuevamente.');
+        setFeedback({ type: 'error', message: 'Error de red al enviar la solicitud. Intenta nuevamente.'});
+      } finally {
+          setLoading(false); // Stop loading regardless of outcome
       }
       // ---------------------------
 
     } else {
       console.log('Validation Errors:', validationErrors);
-      alert('Por favor corrige los errores en el formulario.');
+      setFeedback({ type: 'error', message: 'Por favor corrige los errores en el formulario.' });
     }
   };
   
@@ -401,6 +464,17 @@ const PickupForm: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto p-8 bg-white shadow-lg rounded-lg">
       <h2 className="text-2xl font-semibold mb-6 text-gray-700">Solicitar Recogida de Muestra</h2>
+      
+      {/* Display Schedule Message */} 
+      {!scheduleLoading && scheduleMessage && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md flex items-start space-x-3">
+          <FaInfoCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <p className="text-sm text-blue-700">
+            {scheduleMessage}
+          </p>
+        </div>
+      )}
+      
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Pet Info */}
@@ -695,13 +769,27 @@ const PickupForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Submit Button */}
+        {/* Submit Button & Feedback */} 
         <div className="pt-4">
+          {/* Feedback Area */} 
+          {feedback && (
+            <div 
+              className={`mb-4 p-3 rounded text-sm ${ 
+                feedback.type === 'success' 
+                  ? 'bg-green-100 border border-green-300 text-green-800' 
+                  : 'bg-red-100 border border-red-300 text-red-800'
+              }`}
+            >
+              {feedback.message}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            disabled={loading} // Disable button when loading
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Enviar Solicitud
+            {loading ? 'Enviando...' : 'Enviar Solicitud'} {/* Change text when loading */}
           </button>
         </div>
 

@@ -2,10 +2,13 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const logger = require('./config/logger'); // Import logger
+const path = require('path');
+const db = require('./db'); // Import the database connection utility
 
 // Import routes
 const pickupRoutes = require('./routes/pickupRoutes');
 const adminRoutes = require('./routes/adminRoutes'); // Import admin routes
+const settingsRoutes = require('./routes/settingsRoutes'); // Require the new settings routes
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -22,6 +25,7 @@ app.get('/', (req, res) => {
 // API Routes
 app.use('/api/pickups', pickupRoutes); // Mount pickup routes
 app.use('/api/admin', adminRoutes); // Mount admin routes
+app.use('/api/settings', settingsRoutes); // Use the settings routes
 
 // --- Global Error Handling Middleware --- 
 // Should be defined AFTER all other app.use() and routes calls

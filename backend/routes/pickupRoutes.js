@@ -4,6 +4,18 @@ const db = require('../db'); // Import the database connection utility
 const authenticateToken = require('../middleware/authMiddleware'); // Import auth middleware
 const logger = require('../config/logger'); // Import logger
 
+// Import status values from frontend config (adjust path if needed)
+// NOTE: Ideally, this would be in a shared config/package, but for simplicity:
+let statusValues = [];
+try {
+  // Adjust the path based on your actual project structure relative to this file
+  statusValues = require('../../frontend/src/config/pickupStatuses').statusValues;
+} catch (err) {
+  logger.error("Failed to load status values from frontend config. Using default.", err);
+  // Define fallback/default statuses here if loading fails
+  statusValues = ['pendiente', 'asignado', 'recogido', 'cancelado'];
+}
+
 // --- Store connected SSE clients --- 
 let sseClients = [];
 
@@ -286,17 +298,32 @@ router.put('/:id', async (req, res, next) => {
   const { id } = req.params;
   const { status, driver_id } = req.body; // Expecting status and/or driver_id in the body
 
+  logger.debug(`Received PUT request for pickup ID: ${id}`, { body: req.body });
+
   if (isNaN(parseInt(id, 10))) {
+     logger.warn(`Invalid ID format for PUT request: ${id}`);
      return res.status(400).json({ message: 'ID de solicitud inválido.' });
   }
 
   // Basic validation for update payload
-  if (!status && driver_id === undefined) { // Allow driver_id to be null/0? Adjust as needed.
+  if (status === undefined && driver_id === undefined) {
+    logger.warn(`Empty payload for PUT request on ID: ${id}`);
     return res.status(400).json({ message: 'Se requiere al menos un campo para actualizar (status o driver_id).' });
   }
 
-  // TODO: Add validation for allowed status values (e.g., ['pendiente', 'asignado', ...])
-  // TODO: Add validation for driver_id if drivers table exists
+  // *** Add validation for allowed status values ***
+  if (status !== undefined && !statusValues.includes(status)) {
+      logger.warn(`Invalid status value provided for PUT request on ID ${id}: ${status}`);
+      return res.status(400).json({ 
+          message: `Valor de estado inválido: ${status}. Estados permitidos: ${statusValues.join(', ')}` 
+      });
+  }
+
+  // TODO: Add validation for driver_id if drivers table exists (e.g., check if driver ID is valid)
+  if (driver_id !== undefined && driver_id !== null && isNaN(parseInt(driver_id, 10))) {
+    logger.warn(`Invalid driver_id format for PUT request on ID ${id}: ${driver_id}`);
+    return res.status(400).json({ message: 'ID de Conductor debe ser un número o nulo.'});
+  }
 
   try {
     // Build the update query dynamically based on provided fields

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { getStatusConfig, PICKUP_STATUSES } from '../../config/pickupStatuses'; // Import status config
 
 // TODO: Define a more detailed Pickup type if needed (matching DB schema)
 interface PickupDetail {
@@ -156,6 +157,9 @@ const AdminPickupDetailPage: React.FC = () => {
   if (error) return <p className="text-red-500">Error: {error}</p>;
   if (!pickup) return <p>No se encontró la solicitud.</p>; // Should be caught by error usually
 
+  // Get status configuration for display
+  const statusConfig = getStatusConfig(pickup.status);
+
   return (
     <div className="bg-white p-6 rounded shadow-md">
       <button onClick={() => navigate('/admin/dashboard')} className="mb-4 text-indigo-600 hover:underline">
@@ -187,11 +191,11 @@ const AdminPickupDetailPage: React.FC = () => {
               onChange={(e) => setEditStatus(e.target.value)}
               className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 bg-white"
             >
-               {/* TODO: Populate with actual valid statuses */} 
-              <option value="pendiente">Pendiente</option>
-              <option value="asignado">Asignado</option>
-              <option value="recogido">Recogido</option>
-              <option value="cancelado">Cancelado</option>
+               {PICKUP_STATUSES.map(statusConfig => (
+                 <option key={statusConfig.value} value={statusConfig.value}>
+                   {statusConfig.displayName}
+                 </option>
+               ))}
             </select>
         </div>
          <div>
@@ -214,6 +218,20 @@ const AdminPickupDetailPage: React.FC = () => {
             {isSaving ? 'Guardando...' : 'Guardar Cambios'}
           </button>
           {error && <p className="text-red-500 text-xs mt-1">{error}</p>} {/* Show save errors here */} 
+        </div>
+      </div>
+
+      <div className="mt-4 border-t pt-4 space-y-4">
+        <h3 className="text-lg font-semibold">Estado Actual</h3>
+        <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+          <dt className="text-sm font-medium text-gray-500">Estado</dt>
+          <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ 
+              statusConfig?.badgeClasses ?? 'bg-gray-100 text-gray-800' // Use config badge classes
+             }`}>
+               {statusConfig?.displayName ?? pickup.status} {/* Use config display name */}
+            </span>
+          </dd>
         </div>
       </div>
 

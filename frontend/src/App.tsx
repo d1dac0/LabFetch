@@ -13,6 +13,7 @@ import AdminLayout from './pages/admin/AdminLayout';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminPickupDetailPage from './pages/admin/AdminPickupDetailPage';
+import AdminSettingsPage from './pages/admin/AdminSettingsPage'; // Import the new settings page
 import ProtectedRoute from './components/ProtectedRoute'; // Import the protected route component
 
 // Authentication Check Function
@@ -47,6 +48,7 @@ function App() {
                     {/* Nested Admin Routes (rendered inside AdminLayout's <Outlet />) */}
                     <Route path="dashboard" element={<AdminDashboardPage />} />
                     <Route path="pickups/:id" element={<AdminPickupDetailPage />} />
+                    <Route path="settings" element={<AdminSettingsPage />} /> {/* Add settings route */}
                      {/* Redirect /admin to /admin/dashboard */}
                     <Route index element={<Navigate to="dashboard" replace />} /> 
                 </Route>

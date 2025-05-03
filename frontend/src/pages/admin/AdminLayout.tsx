@@ -1,8 +1,15 @@
 import React from 'react';
-import { Outlet, Link } from 'react-router-dom'; // Outlet renders child routes
+import { Outlet, Link, useNavigate } from 'react-router-dom'; // Outlet renders child routes, useNavigate for navigation
 import labFetchLogo from '../../assets/Logo-white.jpeg'; // Use the white logo
 
 const AdminLayout: React.FC = () => {
+  const navigate = useNavigate(); // Hook for navigation
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminToken'); // Remove token from storage
+    navigate('/admin/login'); // Redirect to login page
+  };
+
   return (
     <div className="min-h-screen bg-gray-200">
       <nav className="bg-gray-800 text-white p-4 shadow-md">
@@ -13,7 +20,13 @@ const AdminLayout: React.FC = () => {
           <div>
             {/* Add navigation links later */}
             <Link to="/admin/dashboard" className="px-3 hover:text-gray-300">Dashboard</Link>
-            {/* Add Logout button later */}
+            <Link to="/admin/settings" className="px-3 hover:text-gray-300">Configuración</Link>
+            <button 
+              onClick={handleLogout}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm"
+            >
+              Cerrar Sesión
+            </button>
           </div>
         </div>
       </nav>
