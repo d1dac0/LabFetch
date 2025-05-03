@@ -3,7 +3,7 @@ name: Deploy Frontend to Linode
 on:
   push:
     branches:
-      - main # Trigger deployment on push to the main branch
+      - master # Trigger deployment on push to the master branch
     paths:
       - 'frontend/**' # Only run if files in the frontend directory change
       - '.github/workflows/deploy.yml' # Or if the workflow file itself changes
