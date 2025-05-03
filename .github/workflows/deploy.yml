@@ -26,6 +26,18 @@ jobs:
         chmod 600 ~/.ssh/id_ed25519
         ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
+    - name: Debug SSH Configuration
+      run: |
+        ls -la ~/.ssh
+        cat ~/.ssh/known_hosts
+
+    - name: Test SSH Connection
+      env:
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+      run: |
+        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} echo "Connection successful"
+
     - name: Deploy Frontend Changes via SSH
       env:
         SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -34,9 +46,9 @@ jobs:
         ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'EOF'
           echo "INFO: Connecting to server ${SSH_HOST}..."
           cd /root/labfetch || { echo 'ERROR: Failed to cd to /root/labfetch'; exit 1; }
-          echo "INFO: Pulling latest changes from main branch..."
-          git checkout main # Ensure we are on the main branch
-          git pull origin main
+          echo "INFO: Pulling latest changes from master branch..."
+          git checkout master # Ensure we are on the master branch
+          git pull origin master
           echo "INFO: Building frontend service..."
           docker compose build frontend
           echo "INFO: Restarting frontend service..."
