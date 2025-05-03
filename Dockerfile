@@ -46,6 +46,9 @@ COPY --from=backend-builder /app/backend ./backend
 # Copy built frontend assets from frontend-builder stage to nginx root
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
+# Debug: Check contents of nginx web root AFTER copy
+RUN ls -la /usr/share/nginx/html
+
 # --- Nginx Configuration ---
 # Copy the Nginx configuration file provided in the frontend directory
 # Note: Ensure nginx.conf correctly proxies /api/ to the backend

@@ -1,0 +1,45 @@
+name: Deploy Frontend to Linode
+
+on:
+  push:
+    branches:
+      - main # Trigger deployment on push to the main branch
+    paths:
+      - 'frontend/**' # Only run if files in the frontend directory change
+      - '.github/workflows/deploy.yml' # Or if the workflow file itself changes
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH Keys and known_hosts
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+    - name: Deploy Frontend Changes via SSH
+      env:
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+      run: |
+        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << 'EOF'
+          echo "INFO: Connecting to server ${SSH_HOST}..."
+          cd /root/labfetch || { echo 'ERROR: Failed to cd to /root/labfetch'; exit 1; }
+          echo "INFO: Pulling latest changes from main branch..."
+          git checkout main # Ensure we are on the main branch
+          git pull origin main
+          echo "INFO: Building frontend service..."
+          docker compose build frontend
+          echo "INFO: Restarting frontend service..."
+          docker compose up -d --no-deps frontend
+          echo "INFO: Deployment script finished successfully."
+        EOF 

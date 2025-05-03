@@ -13,6 +13,7 @@ import AdminLayout from './pages/admin/AdminLayout';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminPickupDetailPage from './pages/admin/AdminPickupDetailPage';
+import ProtectedRoute from './components/ProtectedRoute'; // Import the protected route component
 
 // Authentication Check Function
 const isAuthenticated = () => {
@@ -26,17 +27,6 @@ const isAuthenticated = () => {
   return token.length > 0;
 };
 
-// Protected Route Component
-const ProtectedRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
-    if (!isAuthenticated()) {
-        // Redirect them to the /admin/login page, but save the current location they were
-        // trying to go to. This allows us to send them along to that page after they login,
-        // which is a nicer user experience than dropping them off on the home page.
-        return <Navigate to="/admin/login" replace />;
-    }
-    return children;
-};
-
 function App() {
   return (
     <Router>
@@ -47,19 +37,19 @@ function App() {
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLoginPage />} />
             
-            <Route 
-                path="/admin" 
-                element={
-                    <ProtectedRoute>
+            <Route element={<ProtectedRoute />}>
+                <Route 
+                    path="/admin" 
+                    element={
                         <AdminLayout />
-                    </ProtectedRoute>
-                }
-            >
-                {/* Nested Admin Routes (rendered inside AdminLayout's <Outlet />) */}
-                <Route path="dashboard" element={<AdminDashboardPage />} />
-                <Route path="pickups/:id" element={<AdminPickupDetailPage />} />
-                 {/* Redirect /admin to /admin/dashboard */}
-                <Route index element={<Navigate to="dashboard" replace />} /> 
+                    }
+                >
+                    {/* Nested Admin Routes (rendered inside AdminLayout's <Outlet />) */}
+                    <Route path="dashboard" element={<AdminDashboardPage />} />
+                    <Route path="pickups/:id" element={<AdminPickupDetailPage />} />
+                     {/* Redirect /admin to /admin/dashboard */}
+                    <Route index element={<Navigate to="dashboard" replace />} /> 
+                </Route>
             </Route>
             
             {/* Fallback for unknown routes (optional) */}

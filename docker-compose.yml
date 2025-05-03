@@ -3,7 +3,7 @@ services:
     build:
       context: ./frontend
     ports:
-      - "8181:80" # Expose frontend on host port 8181
+      - "80:80" # Expose frontend on host port 80
     # No secrets needed here, but could add env_file if frontend needed them
     environment:
       - NODE_ENV=production
