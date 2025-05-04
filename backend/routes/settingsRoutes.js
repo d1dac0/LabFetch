@@ -5,8 +5,32 @@ const logger = require('../config/logger');
 
 const router = express.Router();
 
+// --- Public Route --- 
+// GET /api/settings/public/pickup-schedule-message - Get only the public schedule message
+router.get('/public/pickup-schedule-message', async (req, res) => {
+    try {
+        const key = 'pickup_schedule_message';
+        const result = await pool.query('SELECT setting_value FROM settings WHERE setting_key = $1', [key]);
+        if (result.rows.length > 0) {
+            // Return the value directly, maybe in a simple object
+            res.json({ value: result.rows[0].setting_value }); 
+        } else {
+            logger.warn(`Public setting key '${key}' not found.`);
+            res.status(404).json({ message: 'Setting not found' });
+        }
+    } catch (err) {
+        logger.error(`Error fetching public setting '${key}':`, err.message);
+        res.status(500).json({ message: 'Error fetching setting' });
+    }
+});
+
+// --- Admin Routes (Protected) ---
+
+// Apply auth middleware ONLY to the routes below this line
+router.use(authenticateAdmin);
+
 // GET all settings
-router.get('/', authenticateAdmin, async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const result = await pool.query('SELECT setting_key, setting_value FROM settings');
         // Convert array of {setting_key: k, setting_value: v} to {k: v} object
@@ -23,7 +47,7 @@ router.get('/', authenticateAdmin, async (req, res) => {
 
 
 // PUT (update) multiple settings
-router.put('/', authenticateAdmin, async (req, res) => {
+router.put('/', async (req, res) => {
     const settingsToUpdate = req.body; // Expects { key1: value1, key2: value2, ... }
 
     if (typeof settingsToUpdate !== 'object' || settingsToUpdate === null) {

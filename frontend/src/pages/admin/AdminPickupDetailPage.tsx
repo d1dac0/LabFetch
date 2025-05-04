@@ -423,7 +423,7 @@ const AdminPickupDetailPage: React.FC = () => {
        <div className="border-t pt-6 mt-6 space-y-4">
           <h3 className="text-lg font-semibold">Adjuntar Foto</h3>
 
-           {(previewUrl || existingPhotoUrl) && (
+           {previewUrl && (
                 <div className="mb-4">
                     <p className="text-sm font-medium text-gray-600 mb-1">
                         {previewUrl ? 'Vista Previa:' : 'Foto Actual:'}

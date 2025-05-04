@@ -180,16 +180,30 @@ const PickupForm: React.FC = () => {
     const fetchScheduleMessage = async () => {
       setScheduleLoading(true);
       try {
-        const response = await fetch('/api/settings/pickup_schedule_message');
+        // Fetch the specific public setting
+        const response = await fetch('/api/settings/public/pickup-schedule-message'); 
         if (response.ok) {
-          const data = await response.json();
-          setScheduleMessage(data.value);
+          // Expecting { value: "..." }
+          const data = await response.json(); 
+          const message = data?.value;
+          if (message) {
+            setScheduleMessage(message);
+          } else {
+            console.warn('pickup_schedule_message not found in settings response.', data);
+            setScheduleMessage(null);
+          }
         } else {
-          console.warn('Could not load schedule message setting.');
+          // Handle potential 401/403 if settings endpoint becomes protected later
+          if (response.status === 401 || response.status === 403) {
+             console.warn('Unauthorized to fetch settings.');
+             // Decide if login redirect or just hiding the message is appropriate
+          } else {
+             console.error('Failed to load settings:', response.status, response.statusText);
+          }
           setScheduleMessage(null);
         }
       } catch (err) {
-        console.error('Error fetching schedule message:', err);
+        console.error('Error fetching settings:', err);
         setScheduleMessage(null);
       } finally {
         setScheduleLoading(false);
