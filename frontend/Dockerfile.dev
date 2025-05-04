@@ -1,0 +1,24 @@
+# Use an official Node runtime as a parent image
+FROM node:20-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy package.json and package-lock.json (or yarn.lock)
+COPY package*.json ./
+
+# Install dependencies
+# Use --force again if needed for the rollup issue
+RUN npm install --force 
+
+# Copy the rest of the application code into the container
+# This will be largely overwritten by the volume mount in docker-compose, 
+# but it's good practice to have it here for potential standalone use.
+COPY . .
+
+# Make port 5173 available to the world outside this container (Vite default)
+EXPOSE 5173
+
+# Define the command to run the Vite dev server
+# Use --host to expose it outside the container's network interface
+CMD ["npx", "vite", "dev", "--host"] 

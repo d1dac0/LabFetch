@@ -16,9 +16,24 @@ export const PICKUP_STATUSES: StatusConfig[] = [
     badgeClasses: 'bg-blue-100 text-blue-800',
   },
   {
-    value: 'recogido',
-    displayName: 'Recogido',
+    value: 'en_camino',
+    displayName: 'En Camino',
+    badgeClasses: 'bg-orange-100 text-orange-800',
+  },
+  {
+    value: 'recolectado',
+    displayName: 'Recolectado',
     badgeClasses: 'bg-green-100 text-green-800',
+  },
+  {
+    value: 'en_laboratorio',
+    displayName: 'En Laboratorio',
+    badgeClasses: 'bg-purple-100 text-purple-800',
+  },
+  {
+    value: 'completado',
+    displayName: 'Completado',
+    badgeClasses: 'bg-gray-200 text-gray-800',
   },
   {
     value: 'cancelado',

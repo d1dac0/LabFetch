@@ -2,11 +2,16 @@ services:
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile.dev # Specify the development Dockerfile
     ports:
-      - "81:80" # Expose host port 81 mapped to container port 80
-    # No secrets needed here, but could add env_file if frontend needed them
+      - "5173:5173" # Expose Vite dev server port
+    # Mount the local frontend directory into the container for development
+    volumes:
+      - ./frontend:/app # Map local ./frontend to /app in container
+      # Add node_modules anonymous volume to prevent overwriting container's node_modules
+      - /app/node_modules
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=production # Restore production setting
     depends_on:
       - backend
 
@@ -18,7 +23,7 @@ services:
     env_file:
       - secrets.env # Load variables from this file
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=production # Restore production setting
       # DATABASE_URL and JWT_SECRET will be loaded from secrets.env
     depends_on:
       - db

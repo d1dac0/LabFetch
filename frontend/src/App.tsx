@@ -6,6 +6,8 @@ import {
     Route,
     Navigate // Import Navigate for redirection
 } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify'; // Import ToastContainer
+import 'react-toastify/dist/ReactToastify.css'; // Import toastify CSS
 
 // Import Pages/Components
 import PickupFormPage from './pages/PickupFormPage'; // Renamed original App content
@@ -17,6 +19,7 @@ import AdminSettingsPage from './pages/admin/AdminSettingsPage'; // Import the n
 import ProtectedRoute from './components/ProtectedRoute'; // Import the protected route component
 
 // Authentication Check Function
+/* // Remove unused function
 const isAuthenticated = () => {
   const token = localStorage.getItem('adminToken'); // Check for token
   if (!token) {
@@ -27,6 +30,7 @@ const isAuthenticated = () => {
   // More robust check would involve decoding JWT and checking expiration.
   return token.length > 0;
 };
+*/
 
 function App() {
   return (
@@ -57,6 +61,19 @@ function App() {
             {/* Fallback for unknown routes (optional) */}
             <Route path="*" element={<Navigate to="/" replace />} /> 
         </Routes>
+        {/* Add ToastContainer here */}
+        <ToastContainer
+            position="top-right"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="light"
+        />
     </Router>
   )
 }

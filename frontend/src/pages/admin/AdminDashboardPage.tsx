@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios, { AxiosError } from 'axios';
+import { toast } from 'react-toastify';
+import { EventSourcePolyfill } from 'event-source-polyfill';
 import {
   useReactTable,
   getCoreRowModel,
@@ -39,39 +42,47 @@ const AdminDashboardPage: React.FC = () => {
 
   const navigate = useNavigate();
 
-  // Function to fetch initial data
+  // Refactored function to fetch initial data using axios
   const fetchInitialPickups = async () => {
     setLoading(true);
-    setError(null);
+    setError(null); // Clear previous errors (especially SSE errors)
     try {
-      const token = localStorage.getItem('adminToken'); // Get token
+      const token = localStorage.getItem('adminToken');
       if (!token) {
-        throw new Error('No authentication token found.'); // Or redirect to login
+         toast.error('No authentication token found. Redirecting to login.');
+         navigate('/admin/login');
+         return; // Stop execution
       }
 
-      const headers: HeadersInit = { // Define headers
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json' // Keep content type if needed, though maybe not for GET
-      };
+      const response = await axios.get<Pickup[]>('/api/pickups', {
+         headers: { Authorization: `Bearer ${token}` }
+      });
+      setPickups(response.data);
 
-      const response = await fetch('/api/pickups', { headers }); // Use relative path with headers
-      if (!response.ok) {
-         if (response.status === 401) {
-            // Handle unauthorized specifically, e.g., redirect to login
-            navigate('/admin/login'); // Assuming navigate is available
-             throw new Error('Unauthorized: Please log in again.');
-         }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      setPickups(data);
-    } catch (err: unknown) {
+    } catch (err) {
       console.error("Error fetching initial pickups:", err);
-      let message = 'Error al cargar las solicitudes iniciales.';
-      if (err instanceof Error) {
-        message = err.message;
+      // Refactored error handling
+      if (axios.isAxiosError(err)) {
+          const axiosError = err as AxiosError<{ message?: string }>;
+          let message = axiosError.response?.data?.message || 'Error al cargar las solicitudes iniciales.';
+
+          // Handle unauthorized specifically
+          if (axiosError.response?.status === 401) {
+              message = 'Unauthorized: Please log in again. Redirecting...';
+              toast.error(message);
+              navigate('/admin/login'); 
+          } else {
+              toast.error(message);
+              // Optionally set the error state for display if needed, 
+              // but toast might be sufficient for initial load errors.
+              // setError(message);
+          }
+      } else {
+           // Handle non-Axios errors
+           const message = (err instanceof Error) ? err.message : 'Ocurrió un error desconocido al cargar.';
+           toast.error(message);
+           // setError(message); // Optional
       }
-      setError(message);
     } finally {
       setLoading(false);
     }
@@ -81,18 +92,40 @@ const AdminDashboardPage: React.FC = () => {
     fetchInitialPickups(); // Fetch initial data on mount
 
     // --- Set up Server-Sent Events (SSE) --- 
-    const eventSource = new EventSource('/api/pickups/stream');
+    let eventSource: EventSourcePolyfill | null = null;
+
+    const token = localStorage.getItem('adminToken');
+    if (!token) {
+        // Don't attempt SSE connection if not logged in
+        console.warn('Admin token not found, skipping SSE connection.');
+        // Optionally set an error state or rely on fetchInitialPickups redirecting
+        // setError('Authentication required for real-time updates.'); 
+        return; 
+    }
+
+    // Use EventSourcePolyfill and pass headers
+    eventSource = new EventSourcePolyfill('/api/pickups/stream', {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
 
     eventSource.onopen = () => {
       console.log('SSE connection opened.');
-      setError(null); // Clear previous errors on successful connection
+      // Clear specific SSE errors when connection is successful
+      // if (error?.includes('conexión en tiempo real')) {
+      //    setError(null);
+      // } // Let's clear any error on successful open
+      setError(null);
     };
 
     // Listener for our custom 'new_pickup' event
-    eventSource.addEventListener('new_pickup', (event) => {
-      console.log('SSE new_pickup event received:', event.data);
+    eventSource.addEventListener('new_pickup', (event: Event) => {
+      // Cast to MessageEvent to access data property
+      const messageEvent = event as MessageEvent;
+      console.log('SSE new_pickup event received:', messageEvent.data);
       try {
-        const newPickup = JSON.parse(event.data) as Pickup; // Type assertion
+        const newPickup = JSON.parse(messageEvent.data) as Pickup;
 
         // Add to main list
         setPickups(prevPickups => [newPickup, ...prevPickups]);
@@ -119,20 +152,34 @@ const AdminDashboardPage: React.FC = () => {
     });
 
     // Handle generic errors on the EventSource connection
-    eventSource.onerror = (err) => {
+    eventSource.onerror = (err: Event | { status?: number }) => {
       console.error('EventSource failed:', err);
-      setError('Error de conexión en tiempo real. Intentando reconectar...'); 
-      // EventSource automatically attempts reconnection on error
-      // eventSource.close(); // Close manually if reconnection is not desired
+      // Check if it's an error object with status
+      if (err && typeof err === 'object' && 'status' in err && err.status) {
+           if (err.status === 401 || err.status === 403) {
+               setError('Authentication error with real-time updates. Please re-login.');
+               toast.error('Authentication error with real-time updates. Please re-login.');
+               eventSource?.close(); // Close the connection on auth errors
+               navigate('/admin/login'); // Redirect to login
+               return;
+           }
+           // Handle other potential status codes if needed
+           setError(`Connection error: Status ${err.status}`);
+      } else {
+           // Handle generic Event errors or unknown error types
+           setError('Error de conexión en tiempo real. Intentando reconectar...');
+      }
     };
 
     // Cleanup function: close the SSE connection when the component unmounts
     return () => {
-      console.log('Closing SSE connection.');
-      eventSource.close();
+      if (eventSource) {
+         console.log('Closing SSE connection.');
+         eventSource.close();
+      }
     };
 
-  }, [navigate]); // Run only once on component mount
+  }, [navigate]);
 
   // --- TanStack Table Column Definitions ---
   const columns = useMemo<ColumnDef<Pickup>[]>(() => [
@@ -150,7 +197,7 @@ const AdminDashboardPage: React.FC = () => {
         accessorKey: 'nombre_mascota',
         header: ({ column }) => (
           <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
-            Mascota
+            SOLICITANTE
             {{ asc: ' ▲', desc: ' ▼' }[column.getIsSorted() as string] ?? null}
           </button>
         ),
@@ -158,7 +205,7 @@ const AdminDashboardPage: React.FC = () => {
       },
       {
         accessorKey: 'tipo_muestra',
-        header: 'Muestra',
+        header: 'NÚMERO DE CONTACTO',
         cell: info => info.getValue(),
       },
       { // Combine city and department for Ubicacion
@@ -187,7 +234,7 @@ const AdminDashboardPage: React.FC = () => {
         accessorKey: 'created_at',
         header: ({ column }) => (
           <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
-            Fecha Creación
+            FECHA CREACIÓN
             {{ asc: ' ▲', desc: ' ▼' }[column.getIsSorted() as string] ?? null}
           </button>
         ),

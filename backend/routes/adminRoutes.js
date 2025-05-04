@@ -17,6 +17,7 @@ if (!JWT_SECRET) {
 
 // POST /api/admin/login
 router.post('/login', async (req, res, next) => {
+    // logger.debug('Entered POST /login handler'); // REMOVED
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -73,7 +74,7 @@ router.post('/login', async (req, res, next) => {
 });
 
 // Protect subsequent routes
-router.use(authenticateToken);
+router.use(authenticateToken); // Re-enabled authentication
 
 // Example protected route (Add real admin routes here later)
 router.get('/protected-data', (req, res) => {

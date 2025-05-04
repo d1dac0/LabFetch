@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 const logger = require('./config/logger'); // Import logger
 const path = require('path');
+const fs = require('fs'); // Import fs module
 const db = require('./db'); // Import the database connection utility
 
 // Import routes
@@ -11,11 +12,33 @@ const adminRoutes = require('./routes/adminRoutes'); // Import admin routes
 const settingsRoutes = require('./routes/settingsRoutes'); // Require the new settings routes
 
 const app = express();
+
+// --- VERY EARLY REQUEST LOGGER --- REMOVED
+/*
+app.use((req, res, next) => {
+  logger.debug(`Incoming Request: ${req.method} ${req.originalUrl}`);
+  next();
+});
+*/
+// --------------------------------
+
 const port = process.env.PORT || 3001;
+
+// --- Create uploads directory if it doesn't exist --- 
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)){
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    logger.info(`Created uploads directory at ${uploadsDir}`);
+}
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Parse JSON bodies
+
+// --- Serve Uploaded Files Statically ---
+// Make sure this path matches where multer saves files
+app.use('/uploads', express.static(uploadsDir));
+logger.info(`Serving static files from ${uploadsDir} at /uploads`);
 
 // Basic route
 app.get('/', (req, res) => {

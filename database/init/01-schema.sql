@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS pickups (
     -- Status and Assignment
     status VARCHAR(50) NOT NULL DEFAULT 'pendiente', -- e.g., pendiente, asignado, recogido, cancelado
     driver_id INTEGER NULL, -- Foreign key to a potential drivers table
+    notes TEXT NULL,                          -- NEW field for admin notes
+    photo_path VARCHAR(255) NULL,             -- NEW field for path to uploaded photo
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -1,47 +1,56 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
+import axios, { AxiosError } from 'axios'; // Import axios and AxiosError
+import { toast } from 'react-toastify'; // Import toast
 import labFetchLogo from '../../assets/Logo-black.jpeg'; // Use the black logo
 
 const AdminLoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null); // For displaying login errors
+  const [isLoading, setIsLoading] = useState(false); // Add loading state
+  const [error, setError] = useState<string | null>(null); // Keep error state for inline field highlighting, but toast handles main feedback
   const navigate = useNavigate(); // Initialize useNavigate
 
-  const handleLogin = async (event: React.FormEvent) => { // Make function async
-    event.preventDefault(); // Prevent default page reload on form submit
-    setError(null); // Clear previous errors
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null); // Clear previous inline errors
+    setIsLoading(true);
 
-    console.log('Attempting login with:', { username, password });
+    console.log('Attempting login with:', { username }); // Don't log password
 
     try {
-      const response = await fetch('/api/admin/login', { // Use relative path for API call
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
+      // Use axios.post
+      const response = await axios.post<{ token: string }>('/api/admin/login', { 
+          username, 
+          password 
       });
 
-      const data = await response.json(); // Always try to parse JSON response
-
-      if (response.ok) { // Check if response status is 2xx
-        console.log('Login successful:', data);
-        if (data.token) {
-          localStorage.setItem('adminToken', data.token); // Store token
-          navigate('/admin/dashboard'); // Redirect on success
-        } else {
-          setError('No se recibió token de autenticación.'); // Handle case where token is missing
-        }
+      console.log('Login successful:', response.data);
+      if (response.data.token) {
+        localStorage.setItem('adminToken', response.data.token);
+        navigate('/admin/dashboard');
       } else {
-        // Use error message from API if available, otherwise use default
-        const errorMessage = data.message || 'Error en el inicio de sesión.';
-        console.error('Login failed:', errorMessage);
-        setError(errorMessage);
+        // This case is less likely with axios successful response but good practice
+        const msg = 'No se recibió token de autenticación.';
+        setError(msg);
+        toast.error(msg);
       }
     } catch (err) {
-      console.error('Network or other error during login:', err);
-      setError('No se pudo conectar al servidor. Inténtelo de nuevo.'); // Network or parsing error
+      console.error('Login error:', err);
+      // Refactored error handling with AxiosError and toast
+      if (axios.isAxiosError(err)) {
+          const axiosError = err as AxiosError<{ message?: string }>;
+          const message = axiosError.response?.data?.message || 'Error en el inicio de sesión.';
+          setError(message); // Set inline error for potential field highlighting
+          toast.error(message); 
+      } else {
+          // Handle non-Axios errors
+          const message = 'No se pudo conectar al servidor. Inténtelo de nuevo.';
+          setError(message);
+          toast.error(message);
+      }
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -85,10 +94,11 @@ const AdminLoginPage: React.FC = () => {
           </div>
           <div className="flex items-center justify-between">
             <button 
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full disabled:opacity-50"
               type="submit"
+              disabled={isLoading}
             >
-              Ingresar
+              {isLoading ? 'Ingresando...' : 'Ingresar'}
             </button>
           </div>
         </form>

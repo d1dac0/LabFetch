@@ -1,22 +1,25 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs').promises; // Use promises version of fs
+const multer = require('multer'); // Require multer
 const db = require('../db'); // Import the database connection utility
 const authenticateToken = require('../middleware/authMiddleware'); // Import auth middleware
 const logger = require('../config/logger'); // Import logger
+const authenticateAdmin = require('../middleware/authMiddleware');
 
-// Import status values from frontend config (adjust path if needed)
-// NOTE: Ideally, this would be in a shared config/package, but for simplicity:
-let statusValues = [];
-try {
-  // Adjust the path based on your actual project structure relative to this file
-  statusValues = require('../../frontend/src/config/pickupStatuses').statusValues;
-} catch (err) {
-  logger.error("Failed to load status values from frontend config. Using default.", err);
-  // Define fallback/default statuses here if loading fails
-  statusValues = ['pendiente', 'asignado', 'recogido', 'cancelado'];
-}
+// Define valid statuses within the backend
+const VALID_PICKUP_STATUSES = [
+    'pendiente',
+    'asignado',
+    'en_camino',
+    'recolectado', // Changed from 'recogido'? Check consistency
+    'en_laboratorio',
+    'completado',
+    'cancelado'
+];
 
-// --- Store connected SSE clients --- 
+// --- Store connected SSE clients directly in this module --- 
 let sseClients = [];
 
 // Define allowed values based on frontend constants (ideally share/sync these)
@@ -69,7 +72,7 @@ const generateFullAddress = (data) => {
 };
 
 // --- SSE Stream Route --- 
-router.get('/stream', (req, res) => {
+router.get('/stream', authenticateAdmin, (req, res) => {
     // Set headers for SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -95,13 +98,35 @@ router.get('/stream', (req, res) => {
     });
 });
 
-// Function to send update to all SSE clients
+// Function to send update to all SSE clients (uses local sseClients array)
 const sendSseUpdate = (data) => {
     const eventData = JSON.stringify(data);
+    logger.info(`Sending SSE update to ${sseClients.length} clients.`);
     sseClients.forEach(client => {
-        client.res.write(`event: new_pickup\ndata: ${eventData}\n\n`);
+        try {
+            client.res.write(`event: new_pickup\ndata: ${eventData}\n\n`);
+        } catch (error) {
+             logger.error(`Error writing to SSE client ${client.id}:`, error);
+             // Optional: remove client if write fails?
+        }
     });
 };
+
+// --- Multer Configuration --- 
+// Store files in memory first
+const storage = multer.memoryStorage(); 
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // Increased limit to 25MB
+  fileFilter: (req, file, cb) => { // Filter file types
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('¡Solo se permiten archivos de imagen!'), false);
+    }
+  }
+});
+// --------------------------
 
 // POST /api/pickups - Handle new pickup request submission
 router.post('/', async (req, res, next) => {
@@ -146,10 +171,8 @@ router.post('/', async (req, res, next) => {
   if (!num3?.trim()) errors.num3 = 'Número de placa requerido.';
 
   // Optional field validations (if provided)
-  if (letraVia && !validLetters.includes(letraVia)) errors.letraVia = 'Letra de vía inválida.';
   if (bis && letraBis && !validLetters.includes(letraBis)) errors.letraBis = 'Letra de Bis inválida.';
   if (sufijoCardinal1 && !validQuadrants.includes(sufijoCardinal1)) errors.sufijoCardinal1 = 'Sufijo cardinal 1 inválido.';
-  if (letraVia2 && !validLetters.includes(letraVia2)) errors.letraVia2 = 'Letra de vía 2 inválida.';
   if (sufijoCardinal2 && !validQuadrants.includes(sufijoCardinal2)) errors.sufijoCardinal2 = 'Sufijo cardinal 2 inválido.';
 
   // Date and Shift validation
@@ -257,11 +280,11 @@ router.use(authenticateToken);
 router.get('/', async (req, res, next) => {
   logger.debug('Fetching all pickups (Admin)');
   try {
-    // Select relevant columns for the list view initially
     const query = `
         SELECT 
             id, nombre_mascota, tipo_muestra, ciudad, departamento, 
-            direccion_completa, fecha_hora_preferida, tipo_recogida, status, created_at
+            direccion_completa, fecha_preferida, turno_preferido, status, created_at, 
+            notes, photo_path -- Include new fields
         FROM pickups 
         ORDER BY created_at DESC;`; 
     
@@ -276,7 +299,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // GET /api/pickups/:id - Fetch a single pickup request by ID (Admin Only)
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', authenticateAdmin, async (req, res, next) => {
   const { id } = req.params;
   logger.debug(`Fetching pickup with ID: ${id} (Admin)`);
 
@@ -303,87 +326,194 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // PUT /api/pickups/:id - Update a pickup request (Admin Only)
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', authenticateAdmin, async (req, res, next) => {
   const { id } = req.params;
-  const { status, driver_id } = req.body; // Expecting status and/or driver_id in the body
+  const { status, driver_id, notes } = req.body;
+  let updateFields = [];
+  let queryParams = [];
+  let paramIndex = 1;
 
-  logger.debug(`Received PUT request for pickup ID: ${id}`, { body: req.body });
+  logger.info(`PUT request for pickup ID: ${id}`, { body: req.body });
+
+  if (status !== undefined) {
+      // Validate status against backend list
+      if (!VALID_PICKUP_STATUSES.includes(status)) {
+           logger.warn(`Invalid status value provided for pickup ${id}: ${status}`);
+           return res.status(400).json({ message: `Estado inválido: ${status}` });
+      }
+      updateFields.push(`status = $${paramIndex++}`);
+      queryParams.push(status);
+      logger.debug(`Updating status for pickup ${id} to ${status}`);
+  }
+
+  // Handle driver_id (allow null)
+  if (driver_id !== undefined) {
+      if (driver_id !== null && typeof driver_id !== 'number') {
+          logger.warn(`Invalid driver_id type for pickup ${id}: ${typeof driver_id}`);
+          return res.status(400).json({ message: 'driver_id debe ser un número o null.' });
+      }
+      updateFields.push(`driver_id = $${paramIndex++}`);
+      queryParams.push(driver_id);
+      logger.debug(`Updating driver_id for pickup ${id} to ${driver_id}`);
+  }
+
+  // Handle notes (allow null or empty string)
+   if (notes !== undefined) {
+        if (typeof notes !== 'string' && notes !== null) {
+            logger.warn(`Invalid notes type for pickup ${id}: ${typeof notes}`);
+            return res.status(400).json({ message: 'notes debe ser un texto o null.' });
+        }
+        updateFields.push(`notes = $${paramIndex++}`);
+        queryParams.push(notes); // Allow empty string or null
+        logger.debug(`Updating notes for pickup ${id}`);
+    }
+
+  if (updateFields.length === 0) {
+    logger.warn(`PUT request for pickup ${id} received no fields to update.`);
+    return res.status(400).json({ message: 'No se proporcionaron campos para actualizar.' });
+  }
+
+  updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+  queryParams.push(id);
+
+  const updateQuery = `UPDATE pickups SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+
+  logger.debug(`Executing update query for pickup ${id}: ${updateQuery}`, { params: queryParams });
+
+  try {
+    const result = await db.query(updateQuery, queryParams);
+    if (result.rows.length === 0) {
+      logger.warn(`Pickup with ID ${id} not found for update.`);
+      return res.status(404).json({ message: 'Solicitud no encontrada.' });
+    }
+    logger.info(`Pickup ${id} updated successfully.`);
+    res.json({ message: 'Solicitud actualizada exitosamente.', pickup: result.rows[0] });
+  } catch (error) {
+     logger.error(`Error updating pickup ${id}:`, { error });
+     next(error);
+  }
+});
+
+// --- NEW ROUTE: POST Photo Upload --- 
+router.post('/:id/photo', upload.single('pickupPhoto'), async (req, res, next) => {
+  const { id } = req.params;
+  logger.info(`Received photo upload request for pickup ID: ${id}`);
+
+  if (!req.file) {
+    logger.warn(`No file uploaded for pickup ID: ${id}`);
+    return res.status(400).json({ message: 'No se proporcionó ningún archivo de imagen.' });
+  }
 
   if (isNaN(parseInt(id, 10))) {
-     logger.warn(`Invalid ID format for PUT request: ${id}`);
+     logger.warn(`Invalid ID format for photo upload request: ${id}`);
+     // Optionally delete temp file if multer saved one?
      return res.status(400).json({ message: 'ID de solicitud inválido.' });
   }
 
-  // Basic validation for update payload
-  if (status === undefined && driver_id === undefined) {
-    logger.warn(`Empty payload for PUT request on ID: ${id}`);
-    return res.status(400).json({ message: 'Se requiere al menos un campo para actualizar (status o driver_id).' });
-  }
-
-  // *** Add validation for allowed status values ***
-  if (status !== undefined && !statusValues.includes(status)) {
-      logger.warn(`Invalid status value provided for PUT request on ID ${id}: ${status}`);
-      return res.status(400).json({ 
-          message: `Valor de estado inválido: ${status}. Estados permitidos: ${statusValues.join(', ')}` 
-      });
-  }
-
-  // TODO: Add validation for driver_id if drivers table exists (e.g., check if driver ID is valid)
-  if (driver_id !== undefined && driver_id !== null && isNaN(parseInt(driver_id, 10))) {
-    logger.warn(`Invalid driver_id format for PUT request on ID ${id}: ${driver_id}`);
-    return res.status(400).json({ message: 'ID de Conductor debe ser un número o nulo.'});
-  }
-
   try {
-    // Build the update query dynamically based on provided fields
-    let updateFields = [];
-    let values = [];
-    let valueIndex = 1;
-
-    if (status !== undefined) {
-      updateFields.push(`status = $${valueIndex++}`);
-      values.push(status);
+    // --- Check if pickup exists --- 
+    const checkQuery = 'SELECT photo_path FROM pickups WHERE id = $1';
+    const checkResult = await db.query(checkQuery, [id]);
+    if (checkResult.rows.length === 0) {
+      logger.warn(`Pickup with ID ${id} not found for photo upload.`);
+      return res.status(404).json({ message: 'Solicitud de recogida no encontrada.' });
     }
-    if (driver_id !== undefined) {
-      updateFields.push(`driver_id = $${valueIndex++}`);
-      values.push(driver_id); // Allow null to unassign?
+    const oldPhotoPath = checkResult.rows[0].photo_path;
+
+    // --- Save the file --- 
+    try { // Add try block for robust error catching
+      // Check if req.file and originalname exist
+      if (!req.file || typeof req.file.originalname !== 'string') {
+          logger.error('req.file or req.file.originalname is missing or invalid.', { file: req.file });
+          // Throw an error to be caught by the outer handler or the new catch block
+          throw new Error('Información del archivo cargado inválida.');
+      }
+
+      // Log the original filename received by multer
+      const originalName = req.file.originalname;
+      // logger.info('Received originalname:', originalName); // REMOVED
+
+      const fileExt = path.extname(originalName).toLowerCase(); // Get extension
+      // logger.info('Extracted file extension:', fileExt); // REMOVED
+
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const baseFilename = `pickup-${id}-${uniqueSuffix}`;
+      // logger.info('Base filename:', baseFilename); // REMOVED
+
+      // --- Default extension if none found (fallback) ---
+      const finalFileExt = fileExt || '.jpeg'; // Default to .jpeg if extraction failed
+      // logger.info('Using final extension:', finalFileExt); // REMOVED
+      // ----------------------------------------------
+
+      const newFilename = baseFilename + finalFileExt; // Use final extension
+      // logger.info('Generated new filename:', newFilename); // REMOVED
+
+      const uploadsDir = path.join(__dirname, '..', 'uploads');
+      const newFilePath = path.join(uploadsDir, newFilename); // Full path for saving
+      // logger.info('Generated new file path for saving:', newFilePath); // REMOVED
+
+      const relativePath = `/uploads/${newFilename}`; // Path for DB
+      // logger.info('Generated relativePath for DB:', relativePath); // REMOVED
+
+      await fs.writeFile(newFilePath, req.file.buffer); // Saves file
+      // logger.info('Photo saved successfully to filesystem'); // REMOVED
+
+      // Proceed to delete old photo and update DB *only if* file saving succeeded
+
+      // --- Delete old photo if it exists --- 
+      if (oldPhotoPath) {
+        try {
+          const fullOldPath = path.join(__dirname, '..', oldPhotoPath.substring(1)); // Remove leading / from DB path
+          logger.info(`Attempting to delete old photo: ${fullOldPath}`);
+          await fs.unlink(fullOldPath);
+          logger.info(`Deleted old photo: ${fullOldPath}`);
+        } catch (unlinkError) {
+          // Log error but don't fail the request if old file deletion fails
+          if (unlinkError.code !== 'ENOENT') { // Ignore 'file not found' errors
+              logger.error(`Error deleting old photo ${oldPhotoPath}:`, unlinkError);
+          } else {
+               logger.warn(`Old photo not found for deletion: ${oldPhotoPath}`);
+          }
+        }
+      }
+
+      // --- Update database --- 
+      const updateQuery = 'UPDATE pickups SET photo_path = $1 WHERE id = $2 RETURNING photo_path';
+      // logger.info(`Saving photo_path to DB: [${relativePath}]`); // REMOVED 
+      const updateResult = await db.query(updateQuery, [relativePath, id]);
+
+      logger.info(`Updated photo_path in DB for pickup ${id} to: ${updateResult.rows[0].photo_path}`); // KEEPING this one
+
+      res.status(200).json({
+        message: 'Foto cargada y asociada exitosamente.',
+        photoPath: updateResult.rows[0].photo_path 
+      });
+
+    } catch (fileProcessingError) {
+        logger.error('Error during file saving/processing block:', fileProcessingError);
+        // Prevent sending a success response if this block failed
+        // Let the main try...catch below handle the final response
+        // Re-throw the error to be caught by the main handler
+        throw fileProcessingError; 
     }
-
-    // Always update the updated_at timestamp (handled by trigger, but good practice)
-    // The trigger handles updated_at automatically, no need to set it here if trigger exists.
-    // updateFields.push(`updated_at = CURRENT_TIMESTAMP`); 
-
-    if (updateFields.length === 0) {
-         // Should have been caught by earlier validation, but as a safeguard
-        return res.status(400).json({ message: 'No hay campos válidos para actualizar.' });
-    }
-
-    values.push(id); // Add the id for the WHERE clause
-    const query = `UPDATE pickups SET ${updateFields.join(', ')} WHERE id = $${valueIndex} RETURNING *`;
-
-    logger.info("Update Query:", query);
-    logger.info("Update Values:", values);
-
-    const result = await db.query(query, values);
-
-    if (result.rows.length === 0) {
-      logger.warn(`Pickup with ID ${id} not found for PUT request.`);
-      return res.status(404).json({ message: 'Solicitud de recogida no encontrada para actualizar.' });
-    }
-
-    logger.info(`Pickup with ID ${id} updated successfully.`);
-    res.status(200).json({
-      message: 'Solicitud actualizada exitosamente.',
-      pickup: result.rows[0]
-    });
 
   } catch (error) {
-    logger.error(`Error updating pickup with ID ${id}:`, { error: error });
-    next(error); // Pass to global handler
+    // Handle specific Multer errors (like file too large)
+     if (error instanceof multer.MulterError) {
+        logger.warn(`Multer error during photo upload for pickup ${id}:`, error);
+        return res.status(400).json({ message: `Error de carga: ${error.message}` });
+    }
+    // Handle file filter errors
+    if (error.message === '¡Solo se permiten archivos de imagen!') {
+        logger.warn(`Invalid file type uploaded for pickup ${id}`);
+        return res.status(400).json({ message: error.message });
+    }
+    // Handle other errors
+    logger.error(`Error processing photo upload for pickup ${id}:`, error);
+    next(error);
   }
 });
 
 // TODO: Add DELETE /api/pickups/:id route if needed
 
-module.exports = router; 
 module.exports = router; 

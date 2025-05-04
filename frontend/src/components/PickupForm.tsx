@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import axios, { AxiosError } from 'axios';
 import DatePicker, { registerLocale } from "react-datepicker";
 import { es } from 'date-fns/locale/es';
 import "react-datepicker/dist/react-datepicker.css";
 import { FaInfoCircle } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 
 registerLocale('es', es);
 
@@ -171,7 +173,6 @@ const PickupForm: React.FC = () => {
   const [availableCities, setAvailableCities] = useState<string[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
 
@@ -198,12 +199,6 @@ const PickupForm: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (feedback) {
-      setFeedback(null);
-    }
-  }, [formData]);
-
-  useEffect(() => {
     setAvailableCities(citiesByDepartment[formData.departamento] || []);
     if (!citiesByDepartment[formData.departamento]?.includes(formData.ciudad)) {
       setFormData(prev => ({ ...prev, ciudad: '' }));
@@ -212,7 +207,6 @@ const PickupForm: React.FC = () => {
   }, [formData.departamento]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFeedback(null);
     const { name, type } = e.target;
     let value = e.target.value;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
@@ -252,7 +246,6 @@ const PickupForm: React.FC = () => {
   };
 
   const handleDateChange = (date: Date | null) => {
-    setFeedback(null);
     setFormData(prev => ({
        ...prev,
        fechaPreferida: date,
@@ -269,7 +262,6 @@ const PickupForm: React.FC = () => {
   };
 
   const handleTurnoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setFeedback(null);
       const { value } = e.target;
       setFormData(prev => ({ ...prev, turnoPreferido: value as 'mañana' | 'tarde' }));
       if (errors.turnoPreferido) {
@@ -283,70 +275,69 @@ const PickupForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFeedback(null);
+
     const validationErrors = validateForm();
     setErrors(validationErrors);
 
-    if (Object.keys(validationErrors).length === 0) {
-      setLoading(true);
-      const submissionData = {
-        ...formData,
-        fechaPreferida: formData.fechaPreferida 
-            ? formData.fechaPreferida.toISOString().split('T')[0] 
-            : null,
-        turnoPreferido: formData.turnoPreferido,
-        direccion_completa: generateAddressPreview(),
-        bis: formData.bis ? true : false,
-      };
-      console.log('Submitting Form Data:', submissionData);
+    if (Object.keys(validationErrors).length > 0) {
+      toast.error('Por favor corrige los errores en el formulario.');
+      return;
+    }
 
-      try {
-          const response = await fetch('/api/pickups', { 
-             method: 'POST',
-             headers: {
-                'Content-Type': 'application/json',
-             },
-             body: JSON.stringify(submissionData),
-          });
+    setLoading(true);
 
-          const result = await response.json();
+    // Format the date to YYYY-MM-DD string if it exists
+    const formattedDate = formData.fechaPreferida
+      ? formData.fechaPreferida.toISOString().slice(0, 10)
+      : null;
 
-          if (!response.ok) {
-             console.error('Backend Error:', result);
-             const errorMsg = `Error al enviar la solicitud: ${result.message || response.statusText}`;
-             setFeedback({ type: 'error', message: errorMsg });
-          } else {
-            console.log('Backend Success:', result);
-            setFeedback({ type: 'success', message: 'Solicitud enviada exitosamente!'});
-            setFormData(prev => ({
-              ...initialNonAddressState,
-              departamento: prev.departamento,
-              ciudad: prev.ciudad,
-              tipoVia: prev.tipoVia,
-              numViaP1: prev.numViaP1,
-              letraVia: prev.letraVia,
-              bis: prev.bis,
-              letraBis: prev.letraBis,
-              sufijoCardinal1: prev.sufijoCardinal1,
-              numVia2: prev.numVia2,
-              letraVia2: prev.letraVia2,
-              sufijoCardinal2: prev.sufijoCardinal2,
-              num3: prev.num3,
-              complemento: prev.complemento,
-            }));
-            setAvailableCities(citiesByDepartment[formData.departamento] || []);
-            setErrors({});
+    const pickupData = {
+      nombreMascota: formData.nombreMascota,
+      tipoMuestra: formData.tipoMuestra,
+      departamento: formData.departamento,
+      ciudad: formData.ciudad,
+      tipoVia: formData.tipoVia,
+      numViaP1: formData.numViaP1,
+      letraVia: formData.letraVia || null,
+      bis: formData.bis,
+      letraBis: formData.letraBis || null,
+      sufijoCardinal1: formData.sufijoCardinal1 || null,
+      numVia2: formData.numVia2,
+      letraVia2: formData.letraVia2 || null,
+      sufijoCardinal2: formData.sufijoCardinal2 || null,
+      num3: formData.num3,
+      complemento: formData.complemento || null,
+      fechaPreferida: formattedDate, // Use the formatted date string
+      turnoPreferido: formData.turnoPreferido,
+    };
+
+    try {
+      await axios.post('/api/pickups', pickupData);
+      toast.success('¡Solicitud de recogida enviada exitosamente!');
+      setFormData(prev => ({
+        ...prev,
+        ...initialNonAddressState,
+      }));
+      setErrors({});
+
+    } catch (err) {
+      console.error('Error submitting pickup request:', err);
+      if (axios.isAxiosError(err)) {
+          const axiosError = err as AxiosError<{ message?: string; errors?: FormErrors }>;
+          const backendMsg = axiosError.response?.data?.message || 'Ocurrió un error al enviar la solicitud.';
+          const validationErrs = axiosError.response?.data?.errors;
+
+          toast.error(backendMsg);
+
+          if (validationErrs && typeof validationErrs === 'object') {
+              setErrors(validationErrs);
           }
-
-      } catch (error) {
-        console.error('Network/Fetch Error:', error);
-        setFeedback({ type: 'error', message: 'Error de red al enviar la solicitud. Intenta nuevamente.'});
-      } finally {
-          setLoading(false);
+      } else {
+          const message = (err instanceof Error) ? err.message : 'Ocurrió un error desconocido.';
+          toast.error(message);
       }
-    } else {
-      console.log('Validation Errors:', validationErrors);
-      setFeedback({ type: 'error', message: 'Por favor corrige los errores en el formulario.' });
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -390,8 +381,8 @@ const PickupForm: React.FC = () => {
   const validateForm = (): FormErrors => {
     const newErrors: FormErrors = {};
 
-    if (!formData.nombreMascota.trim()) newErrors.nombreMascota = 'El nombre de la mascota es obligatorio.';
-    if (!formData.tipoMuestra.trim()) newErrors.tipoMuestra = 'El tipo de muestra es obligatorio.';
+    if (!formData.nombreMascota.trim()) newErrors.nombreMascota = 'Nombre del solicitante requerido.';
+    if (!formData.tipoMuestra.trim()) newErrors.tipoMuestra = 'Número de contacto requerido.';
     if (!formData.departamento) newErrors.departamento = 'El departamento es obligatorio.';
     if (!formData.ciudad) newErrors.ciudad = 'La ciudad es obligatoria.';
     if (!formData.tipoVia) newErrors.tipoVia = 'El tipo de vía es obligatorio.';
@@ -460,8 +451,7 @@ const PickupForm: React.FC = () => {
         </div>
 
         <div className="pb-2 border-b border-gray-200">
-          <label className="text-lg font-semibold text-gray-800">Dirección de Recogida</label>
-          <p className="text-xs text-gray-500 mb-1">Basado en nomenclatura estándar. Ver <a href="https://wiki.openstreetmap.org/wiki/ES:Colombia/Gu%C3%ADa_para_mapear/nomenclatura_para_calles" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">guía OSM</a>.</p>
+          <label className="text-lg font-semibold text-gray-800">Dirección de Recogida</label>          
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -714,18 +704,6 @@ const PickupForm: React.FC = () => {
         </div>
 
         <div className="pt-4">
-          {feedback && (
-            <div 
-              className={`mb-4 p-3 rounded text-sm ${ 
-                feedback.type === 'success' 
-                  ? 'bg-green-100 border border-green-300 text-green-800' 
-                  : 'bg-red-100 border border-red-300 text-red-800'
-              }`}
-            >
-              {feedback.message}
-            </div>
-          )}
-
           <button
             type="submit"
             disabled={loading}
