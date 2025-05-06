@@ -59,7 +59,7 @@ const AdminLoginPage: React.FC = () => {
       <div className="bg-white p-8 rounded shadow-md w-full max-w-sm">
         {/* Logo */}
         <img src={labFetchLogo} alt="Dx Laboratorio Veterinario Logo" className="w-32 mx-auto mb-6" /> 
-        <h2 className="text-2xl font-bold mb-6 text-center">Admin Login</h2>
+        <h2 className="text-2xl font-bold mb-6 text-center">Inicio de Sesión</h2>
         <form onSubmit={handleLogin}>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">

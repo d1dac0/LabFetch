@@ -19,8 +19,9 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-module.exports = {
+module.exports = pool;
+/* {
   query: (text, params) => pool.query(text, params),
   // Add other specific database functions if needed
   // e.g., getClient: () => pool.connect(),
-}; 
+}; */ 

@@ -4,7 +4,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev # Specify the development Dockerfile
     ports:
-      - "5173:5173" # Expose Vite dev server port
+      - "81:5173" # Expose Vite dev server port
     # Mount the local frontend directory into the container for development
     volumes:
       - ./frontend:/app # Map local ./frontend to /app in container

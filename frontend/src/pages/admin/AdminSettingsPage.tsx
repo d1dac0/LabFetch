@@ -13,7 +13,7 @@ const AdminSettingsPage: React.FC = () => {
             setError(null);
             const token = localStorage.getItem('adminToken');
             if (!token) {
-                setError('Authentication required.');
+                setError('Se requiere autenticación.');
                 setIsLoading(false);
                 return;
             }
@@ -27,11 +27,11 @@ const AdminSettingsPage: React.FC = () => {
                 console.error("Error fetching settings:", err);
                 if (axios.isAxiosError(err)) {
                     const axiosError = err as AxiosError<{ message?: string }>;
-                    const message = axiosError.response?.data?.message || 'Failed to fetch settings.';
+                    const message = axiosError.response?.data?.message || 'Error al cargar la configuración.';
                     setError(message);
                     toast.error(message);
                 } else {
-                    const message = (err instanceof Error) ? err.message : 'An unknown error occurred.';
+                    const message = (err instanceof Error) ? err.message : 'Ocurrió un error desconocido.';
                     setError(message);
                     toast.error(message);
                 }
@@ -56,9 +56,9 @@ const AdminSettingsPage: React.FC = () => {
         setError(null);
         const token = localStorage.getItem('adminToken');
         if (!token) {
-            setError('Authentication required.');
+            setError('Se requiere autenticación.');
             setIsLoading(false);
-            toast.error('Authentication required.');
+            toast.error('Se requiere autenticación.');
             return;
         }
 
@@ -69,16 +69,16 @@ const AdminSettingsPage: React.FC = () => {
                     'Content-Type': 'application/json',
                 },
             });
-            toast.success('Settings updated successfully!');
+            toast.success('¡Configuración actualizada exitosamente!');
         } catch (err) {
             console.error("Error updating settings:", err);
             if (axios.isAxiosError(err)) {
                 const axiosError = err as AxiosError<{ message?: string }>;
-                const message = axiosError.response?.data?.message || 'Failed to update settings.';
+                const message = axiosError.response?.data?.message || 'Error al actualizar la configuración.';
                 setError(message);
                 toast.error(message);
             } else {
-                const message = (err instanceof Error) ? err.message : 'An unknown error occurred.';
+                const message = (err instanceof Error) ? err.message : 'Ocurrió un error desconocido.';
                 setError(message);
                 toast.error(message);
             }
@@ -96,9 +96,9 @@ const AdminSettingsPage: React.FC = () => {
 
     return (
         <div className="container mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold mb-6">Admin Settings</h1>
+            <h1 className="text-3xl font-bold mb-6">Configuración de Administrador</h1>
 
-            {isLoading && <p>Loading settings...</p>}
+            {isLoading && <p>Cargando configuración...</p>}
             {error && <p className="text-red-500">Error: {error}</p>}
 
             {!isLoading && !error && (
@@ -121,7 +121,7 @@ const AdminSettingsPage: React.FC = () => {
                             </div>
                         ))
                     ) : (
-                        <p>No settings found.</p>
+                        <p>No se encontró configuración.</p>
                     )}
 
                     <div className="flex justify-end">
@@ -130,7 +130,7 @@ const AdminSettingsPage: React.FC = () => {
                             disabled={isLoading}
                             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                         >
-                            {isLoading ? 'Saving...' : 'Save Changes'}
+                            {isLoading ? 'Guardando...' : 'Guardar Cambios'}
                         </button>
                     </div>
                 </form>

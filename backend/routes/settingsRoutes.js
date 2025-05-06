@@ -16,11 +16,11 @@ router.get('/public/pickup-schedule-message', async (req, res) => {
             res.json({ value: result.rows[0].setting_value }); 
         } else {
             logger.warn(`Public setting key '${key}' not found.`);
-            res.status(404).json({ message: 'Setting not found' });
+            res.status(404).json({ message: 'Configuración no encontrada' });
         }
     } catch (err) {
         logger.error(`Error fetching public setting '${key}':`, err.message);
-        res.status(500).json({ message: 'Error fetching setting' });
+        res.status(500).json({ message: 'Error al obtener la configuración' });
     }
 });
 
@@ -51,7 +51,7 @@ router.put('/', async (req, res) => {
     const settingsToUpdate = req.body; // Expects { key1: value1, key2: value2, ... }
 
     if (typeof settingsToUpdate !== 'object' || settingsToUpdate === null) {
-        return res.status(400).json({ message: 'Invalid request body: Expected an object of settings.' });
+        return res.status(400).json({ message: 'Cuerpo de solicitud inválido: Se esperaba un objeto de configuración.' });
     }
 
     const client = await pool.connect();
@@ -72,12 +72,12 @@ router.put('/', async (req, res) => {
         }
 
         await client.query('COMMIT');
-        res.json({ message: 'Settings updated successfully' });
+        res.json({ message: 'Configuración actualizada exitosamente' });
 
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Error updating settings:', err.message);
-        res.status(500).json({ message: 'Error updating settings' });
+        res.status(500).json({ message: 'Error al actualizar la configuración' });
     } finally {
         client.release();
     }

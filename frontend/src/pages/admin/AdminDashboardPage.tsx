@@ -15,6 +15,7 @@ import {
   type ColumnFiltersState,
 } from '@tanstack/react-table';
 import { PICKUP_STATUSES, getStatusConfig } from '../../config/pickupStatuses';
+import { FaFileAlt, FaCamera } from 'react-icons/fa';
 
 interface Pickup {
   id: number;
@@ -24,7 +25,11 @@ interface Pickup {
   departamento: string;
   direccion_completa: string;
   status: string;
-  created_at: string; 
+  created_at: string;
+  fecha_preferida: string | null;
+  turno_preferido?: 'mañana' | 'tarde' | null;
+  notes: string | null;
+  photo_path: string | null;
 }
 
 const AdminDashboardPage: React.FC = () => {
@@ -68,7 +73,7 @@ const AdminDashboardPage: React.FC = () => {
 
           // Handle unauthorized specifically
           if (axiosError.response?.status === 401) {
-              message = 'Unauthorized: Please log in again. Redirecting...';
+              message = 'No autorizado: Por favor, inicie sesión de nuevo. Redirigiendo...';
               toast.error(message);
               navigate('/admin/login'); 
           } else {
@@ -157,14 +162,14 @@ const AdminDashboardPage: React.FC = () => {
       // Check if it's an error object with status
       if (err && typeof err === 'object' && 'status' in err && err.status) {
            if (err.status === 401 || err.status === 403) {
-               setError('Authentication error with real-time updates. Please re-login.');
-               toast.error('Authentication error with real-time updates. Please re-login.');
+               setError('Error de autenticación con actualizaciones en tiempo real. Por favor, reingrese.');
+               toast.error('Error de autenticación con actualizaciones en tiempo real. Por favor, reingrese.');
                eventSource?.close(); // Close the connection on auth errors
                navigate('/admin/login'); // Redirect to login
                return;
            }
            // Handle other potential status codes if needed
-           setError(`Connection error: Status ${err.status}`);
+           setError(`Error de conexión: Estado ${err.status}`);
       } else {
            // Handle generic Event errors or unknown error types
            setError('Error de conexión en tiempo real. Intentando reconectar...');
@@ -212,7 +217,7 @@ const AdminDashboardPage: React.FC = () => {
         id: 'ubicacion',
         header: 'Ubicación',
         accessorFn: row => `${row.ciudad}, ${row.departamento}`, // Create combined value
-        cell: info => info.getValue(),
+        cell: info => info.getValue() as string, // CORRECTED: No date formatting needed here
       },
       {
         accessorKey: 'status',
@@ -241,14 +246,63 @@ const AdminDashboardPage: React.FC = () => {
         cell: info => new Date(info.getValue() as string).toLocaleString('es-CO'),
       },
       {
+        accessorKey: 'fecha_preferida',
+        header: ({ column }) => (
+          <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+            FECHA PREFERIDA
+            {{ asc: ' ▲', desc: ' ▼' }[column.getIsSorted() as string] ?? null}
+          </button>
+        ),
+        cell: info => {
+          const dateValue = info.getValue() as string | null;
+          console.log('Dashboard - fecha_preferida dateValue:', dateValue); // DEBUG LOG
+          if (!dateValue || dateValue.trim() === '') return 'N/A';
+          const date = new Date(dateValue); // SIMPLIFIED: Use dateValue directly
+          if (isNaN(date.getTime())) {
+            console.error('Dashboard - Invalid date from value (direct parse):', dateValue);
+            return 'Fecha Inválida';
+          }
+
+          const formattedDate = date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+          
+          // Optionally display turno_preferido if available
+          const turno = info.row.original.turno_preferido;
+          return turno ? `${formattedDate} (${turno})` : formattedDate;
+        },
+      },
+      {
         id: 'actions',
         header: 'Acciones',
-        cell: ({ row }) => (
-          <Link to={`/admin/pickups/${row.original.id}`} className="text-indigo-600 hover:text-indigo-900">
-            Detalles
-          </Link>
-        ),
+        cell: ({ row }) => {
+          return (
+            <Link 
+              to={`/admin/pickups/${row.original.id}`} 
+              className="text-indigo-600 hover:text-indigo-900 inline-flex items-center"
+            >
+              <span>Detalles</span>
+            </Link>
+          );
+        },
       },
+      {
+        id: 'row-badges',
+        header: () => null, // No visible header text for this column
+        cell: ({ row }) => {
+          const hasNotes = !!row.original.notes;
+          const hasPhoto = !!row.original.photo_path;
+          if (!hasNotes && !hasPhoto) return null;
+
+          return (
+            <div className="relative w-full"> {/* Removed h-full */}
+              <div className="absolute top-1 right-1 flex space-x-1"> {/* Adjusted positioning, removed items-center and p-1 */}
+                {hasNotes && <FaFileAlt title="Tiene notas" className="text-blue-500 text-xs" />}
+                {hasPhoto && <FaCamera title="Tiene foto" className="text-green-500 text-xs" />}
+              </div>
+            </div>
+          );
+        },
+        size: 30,
+      }
     ], []); // Empty dependency array, columns definition doesn't change
 
   // --- TanStack Table Instance ---

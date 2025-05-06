@@ -26,7 +26,8 @@ interface PickupDetail {
   direccion_completa: string | null;
   latitude: number | null;
   longitude: number | null;
-  fecha_hora_preferida: string | null; // ISO string
+  fecha_preferida: string | null; // Changed from fecha_hora_preferida
+  turno_preferido: 'mañana' | 'tarde' | null; // Added this
   tipo_recogida: string;
   status: string;
   driver_id: number | null;
@@ -62,7 +63,7 @@ const AdminPickupDetailPage: React.FC = () => {
       try {
         const token = localStorage.getItem('adminToken');
         if (!token) {
-            toast.error('No authentication token found. Please log in.');
+            toast.error('No se encontró token de autenticación. Por favor, inicie sesión.');
             navigate('/admin/login');
             return;
         }
@@ -87,7 +88,7 @@ const AdminPickupDetailPage: React.FC = () => {
             let message = axiosError.response?.data?.message || 'Error al cargar los detalles.';
 
             if (axiosError.response?.status === 401) {
-                message = 'Unauthorized: Please log in again. Redirecting...';
+                message = 'No autorizado: Por favor, inicie sesión de nuevo. Redirigiendo...';
                 toast.error(message);
                 navigate('/admin/login');
             } else if (axiosError.response?.status === 404) {
@@ -151,7 +152,7 @@ const AdminPickupDetailPage: React.FC = () => {
     try {
       const token = localStorage.getItem('adminToken');
       if (!token) {
-          toast.error('Authentication required.');
+          toast.error('Se requiere autenticación.');
           setIsSaving(false);
           return;
       }
@@ -264,7 +265,7 @@ const AdminPickupDetailPage: React.FC = () => {
       try {
           const token = localStorage.getItem('adminToken');
           if (!token) {
-              toast.error('Authentication required.');
+              toast.error('Se requiere autenticación.');
               setIsUploading(false);
               return;
           }
@@ -342,7 +343,19 @@ const AdminPickupDetailPage: React.FC = () => {
           <p><strong>Número de contacto:</strong> {pickup.tipo_muestra}</p>
           <p><strong>Dirección:</strong> {pickup.direccion_completa || 'N/A'}</p>
           <p><strong>Ciudad:</strong> {pickup.ciudad}, {pickup.departamento}</p>
-          <p><strong>Fecha Preferida:</strong> {pickup.fecha_hora_preferida ? new Date(pickup.fecha_hora_preferida).toLocaleString('es-CO') : 'Inmediata'}</p>
+          <p><strong>Fecha Preferida:</strong> {
+            (() => {
+              console.log('Detail Page - pickup.fecha_preferida:', pickup.fecha_preferida); // DEBUG LOG
+              if (!pickup.fecha_preferida || pickup.fecha_preferida.trim() === '') return 'Inmediata';
+              const date = new Date(pickup.fecha_preferida); // SIMPLIFIED: Use dateValue directly
+              if (isNaN(date.getTime())) {
+                console.error('Detail Page - Invalid date from value (direct parse):', pickup.fecha_preferida);
+                return 'Fecha Inválida';
+              }
+              const formattedDate = date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+              return pickup.turno_preferido ? `${formattedDate} (${pickup.turno_preferido})` : formattedDate;
+            })()
+          }</p>
           <p><strong>Tipo Recogida:</strong> {pickup.tipo_recogida}</p>
           <p><strong>Creada:</strong> {new Date(pickup.created_at).toLocaleString('es-CO')}</p>
           <p><strong>Última Actualización:</strong> {new Date(pickup.updated_at).toLocaleString('es-CO')}</p>

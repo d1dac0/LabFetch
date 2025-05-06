@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios, { AxiosError } from 'axios';
 import DatePicker, { registerLocale } from "react-datepicker";
 import { es } from 'date-fns/locale/es';
+import { format } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { FaInfoCircle } from 'react-icons/fa';
 import { toast } from 'react-toastify';
@@ -302,7 +303,7 @@ const PickupForm: React.FC = () => {
 
     // Format the date to YYYY-MM-DD string if it exists
     const formattedDate = formData.fechaPreferida
-      ? formData.fechaPreferida.toISOString().slice(0, 10)
+      ? format(formData.fechaPreferida, 'yyyy-MM-dd')
       : null;
 
     const pickupData = {
@@ -321,7 +322,7 @@ const PickupForm: React.FC = () => {
       sufijoCardinal2: formData.sufijoCardinal2 || null,
       num3: formData.num3,
       complemento: formData.complemento || null,
-      fechaPreferida: formattedDate, // Use the formatted date string
+      fechaPreferida: formattedDate,
       turnoPreferido: formData.turnoPreferido,
     };
 
@@ -412,10 +413,10 @@ const PickupForm: React.FC = () => {
              newErrors.fechaPreferida = 'La fecha no puede ser pasada.';
         }
         if (!formData.turnoPreferido) {
-            newErrors.turnoPreferido = 'Debes seleccionar un turno (Mañana o Tarde).';
+            newErrors.turnoPreferido = 'Debes seleccionar una jornada (Mañana o Tarde).';
         }
     } else if (formData.turnoPreferido) {
-        newErrors.fechaPreferida = 'Debes seleccionar una fecha para elegir un turno.';
+        newErrors.fechaPreferida = 'Debes seleccionar una fecha para elegir una jornada.';
     }
 
     return newErrors;
@@ -685,7 +686,7 @@ const PickupForm: React.FC = () => {
 
            <div>
              <label className={`block text-sm font-medium mb-1 ${!formData.fechaPreferida ? 'text-gray-400' : 'text-gray-700'}`}>
-                 Turno Preferido {formData.fechaPreferida ? '*' : ''}
+                 Jornada Preferida {formData.fechaPreferida ? '*' : ''}
              </label>
              <div className={`flex items-center space-x-6 mt-2 ${!formData.fechaPreferida ? 'opacity-50' : ''}`}>
                 <label className="flex items-center">

@@ -31,16 +31,16 @@ router.post('/login', async (req, res, next) => {
         const admin = result.rows[0];
 
         if (!admin) {
-            logger.warn(`Login attempt failed: User '${username}' not found.`);
-            return res.status(401).json({ message: 'Credenciales inválidas.' }); // User not found
+            logger.warn(`Login attempt failed for non-existent user: ${username}`);
+            return res.status(401).json({ message: 'Usuario no encontrado' }); // Translated
         }
 
         // Compare provided password with stored hash
         const isMatch = await bcrypt.compare(password, admin.password_hash);
 
         if (!isMatch) {
-            logger.warn(`Login attempt failed: Incorrect password for user '${username}'.`);
-            return res.status(401).json({ message: 'Credenciales inválidas.' }); // Incorrect password
+            logger.warn(`Login attempt failed for user: ${username} (invalid password)`);
+            return res.status(401).json({ message: 'Credenciales inválidas' }); // Translated
         }
 
         // Passwords match - Generate JWT
@@ -68,7 +68,7 @@ router.post('/login', async (req, res, next) => {
         );
 
     } catch (error) {
-        logger.error('Error during admin login:', { error: error });
+        logger.error('Error during user login:', { error: error });
         next(error); // Pass DB or other errors to global handler
     }
 });
@@ -79,8 +79,8 @@ router.use(authenticateToken); // Re-enabled authentication
 // Example protected route (Add real admin routes here later)
 router.get('/protected-data', (req, res) => {
     // Access admin info from req.admin (set by authMiddleware)
-    logger.info(`Accessing protected data by admin: ${req.admin.username}`);
-    res.json({ message: "This is protected admin data!", admin: req.admin });
+    logger.info(`Accessing protected data by user: ${req.admin.username}`);
+    res.json({ message: "This is protected data!", admin: req.admin });
 });
 
 // TODO: Add other admin routes here (e.g., fetching pickups, updating status)
