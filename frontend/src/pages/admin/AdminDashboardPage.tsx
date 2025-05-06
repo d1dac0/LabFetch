@@ -255,11 +255,11 @@ const AdminDashboardPage: React.FC = () => {
         ),
         cell: info => {
           const dateValue = info.getValue() as string | null;
-          console.log('Dashboard - fecha_preferida dateValue:', dateValue); // DEBUG LOG
+          // console.log('Dashboard - fecha_preferida dateValue:', dateValue); // REMOVING DEBUG LOG
           if (!dateValue || dateValue.trim() === '') return 'N/A';
-          const date = new Date(dateValue); // SIMPLIFIED: Use dateValue directly
+          const date = new Date(dateValue);
           if (isNaN(date.getTime())) {
-            console.error('Dashboard - Invalid date from value (direct parse):', dateValue);
+            // console.error('Dashboard - Invalid date from value (direct parse):', dateValue); // REMOVING DEBUG LOG
             return 'Fecha Inválida';
           }
 

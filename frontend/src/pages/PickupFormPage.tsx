@@ -1,6 +1,6 @@
 import React from 'react';
 import PickupForm from '../components/PickupForm';
-import labFetchLogo from '../assets/Logo-black.jpeg'; // Use the black logo
+import labFetchLogo from '../assets/Logo-white.jpeg'; // Use the black logo
 
 const PickupFormPage: React.FC = () => {
   return (

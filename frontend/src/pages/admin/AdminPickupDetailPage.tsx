@@ -345,11 +345,11 @@ const AdminPickupDetailPage: React.FC = () => {
           <p><strong>Ciudad:</strong> {pickup.ciudad}, {pickup.departamento}</p>
           <p><strong>Fecha Preferida:</strong> {
             (() => {
-              console.log('Detail Page - pickup.fecha_preferida:', pickup.fecha_preferida); // DEBUG LOG
+              // console.log('Detail Page - pickup.fecha_preferida:', pickup.fecha_preferida); // REMOVING DEBUG LOG
               if (!pickup.fecha_preferida || pickup.fecha_preferida.trim() === '') return 'Inmediata';
-              const date = new Date(pickup.fecha_preferida); // SIMPLIFIED: Use dateValue directly
+              const date = new Date(pickup.fecha_preferida);
               if (isNaN(date.getTime())) {
-                console.error('Detail Page - Invalid date from value (direct parse):', pickup.fecha_preferida);
+                // console.error('Detail Page - Invalid date from value (direct parse):', pickup.fecha_preferida); // REMOVING DEBUG LOG
                 return 'Fecha Inválida';
               }
               const formattedDate = date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
